@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // State
   let user = getOrInitUser();
   let socket = io();
-  let voiceManager = new WebRTCVoiceManager(socket);
+  let voiceManager = new WebRTCVoiceManager(socket, user);
 
   let servers = [];
   let currentServer = null;
@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateUserProfile(name, avatarColor) {
     user.name = name || user.name;
     user.avatarColor = avatarColor || user.avatarColor;
+    voiceManager.user = user;
     localStorage.setItem('cordlite_user', JSON.stringify(user));
     socket.emit('user:update', { name: user.name, avatarColor: user.avatarColor });
     renderUserBar();

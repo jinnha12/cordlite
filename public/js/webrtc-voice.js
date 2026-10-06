@@ -3,8 +3,9 @@
  * 100% firewall-piercing, works across all mobile networks and Wi-Fis without STUN/TURN or cards!
  */
 class WebRTCVoiceManager {
-  constructor(socket) {
+  constructor(socket, user = null) {
     this.socket = socket;
+    this.user = user;
     this.localStream = null;
     this.audioCtx = null;
     this.micSource = null;
@@ -77,6 +78,8 @@ class WebRTCVoiceManager {
     // Direct WebSocket audio stream chunk from a friend
     this.socket.on('voice:audio_stream', ({ fromSocketId, fromUser, audioData, sampleRate }) => {
       if (this.isDeafened) return;
+      if (fromSocketId === this.socket.id) return;
+      if (this.user && fromUser && fromUser.userId === this.user.userId) return;
 
       let peer = this.peers.get(fromSocketId);
       if (!peer) {
