@@ -90,6 +90,27 @@ try {
   db = defaultState;
 }
 
+// Auto-heal any server icons that were incorrectly defaulted to 'C'
+if (db.servers) {
+  let needsSave = false;
+  for (const srv of Object.values(db.servers)) {
+    if (srv && srv.name && (srv.icon === 'C' && !srv.name.toUpperCase().startsWith('C'))) {
+      const words = srv.name.trim().split(/\s+/).filter(Boolean);
+      srv.icon = words.length > 1
+        ? words.map(w => w[0]).join('').substring(0, 3).toUpperCase()
+        : srv.name.trim().charAt(0).toUpperCase();
+      needsSave = true;
+    }
+  }
+  if (needsSave) {
+    try {
+      fs.writeFileSync(STORE_PATH, JSON.stringify(db, null, 2));
+    } catch (e) {
+      console.error('Error auto-saving store.json:', e);
+    }
+  }
+}
+
 function saveStore() {
   try {
     fs.writeFileSync(STORE_PATH, JSON.stringify(db, null, 2));
@@ -200,11 +221,22 @@ io.on('connection', (socket) => {
   socket.on('server:create', ({ name, icon }) => {
     const user = activeUsers.get(socket.id);
     const serverId = 'srv-' + Math.random().toString(36).substring(2, 9);
-    const srvInitials = (name || 'NH').split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+    const cleanName = (name && typeof name === 'string' && name.trim()) ? name.trim() : 'New Hangout';
+    
+    let finalIcon = (icon && typeof icon === 'string' && icon.trim()) ? icon.trim().toUpperCase() : '';
+    if (!finalIcon) {
+      const words = cleanName.split(/\s+/).filter(Boolean);
+      if (words.length > 1) {
+        finalIcon = words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+      } else {
+        finalIcon = cleanName.charAt(0).toUpperCase();
+      }
+    }
+
     const newServer = {
       id: serverId,
-      name: name || 'New Hangout',
-      icon: icon || srvInitials,
+      name: cleanName,
+      icon: finalIcon || 'NH',
       ownerId: user ? user.userId : null,
       created: Date.now(),
       channels: [

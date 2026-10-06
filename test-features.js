@@ -207,6 +207,43 @@ async function runTests() {
     });
   });
 
+  // Test Server Creation Initials and No Duplicates
+  await new Promise((resolve) => {
+    let createdServer = null;
+    let listReceived = null;
+
+    const checkComplete = () => {
+      if (createdServer && listReceived) {
+        if (createdServer.icon === 'BG') {
+          console.log(`[PASS] Server profile initials correctly derived: "${createdServer.name}" -> "${createdServer.icon}"!`);
+        } else {
+          console.error(`[FAIL] Expected icon "BG", got: ${createdServer.icon}`);
+          failures++;
+        }
+        const matches = listReceived.filter(s => s.id === createdServer.id);
+        if (matches.length === 1) {
+          console.log(`[PASS] Server list has exactly 1 entry for new server (no duplicates)!`);
+        } else {
+          console.error(`[FAIL] Expected 1 server in list, found: ${matches.length}`);
+          failures++;
+        }
+        resolve();
+      }
+    };
+
+    client1.once('server:created', (newServer) => {
+      createdServer = newServer;
+      checkComplete();
+    });
+
+    client1.once('server:list', (serverList) => {
+      listReceived = serverList;
+      checkComplete();
+    });
+
+    client1.emit('server:create', { name: 'Battle Grounds', icon: '' });
+  });
+
   client1.disconnect();
   client2.disconnect();
 

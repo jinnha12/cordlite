@@ -590,7 +590,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('server:list', (serverList) => {
-    servers = serverList;
+    const seen = new Set();
+    const unique = [];
+    (serverList || []).forEach(s => {
+      if (s && s.id && !seen.has(s.id)) {
+        seen.add(s.id);
+        unique.push(s);
+      }
+    });
+    servers = unique;
     renderServerRail();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -618,7 +626,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('server:created', (newServer) => {
-    servers.push(newServer);
+    if (!newServer || !newServer.id) return;
+    const existingIndex = servers.findIndex(s => s.id === newServer.id);
+    if (existingIndex >= 0) {
+      servers[existingIndex] = newServer;
+    } else {
+      servers.push(newServer);
+    }
     renderServerRail();
     selectServer(newServer.id);
     showToast(`Server "${newServer.name}" created!`);
@@ -726,15 +740,19 @@ document.addEventListener('DOMContentLoaded', () => {
     serverRail.appendChild(divider);
 
     // List Servers
+    const seenSrvIds = new Set();
     servers.forEach(srv => {
+      if (!srv || !srv.id || seenSrvIds.has(srv.id)) return;
+      seenSrvIds.add(srv.id);
       const isSelected = currentServer && currentServer.id === srv.id;
       const srvEl = document.createElement('div');
       srvEl.className = `server-item ${isSelected ? 'active' : ''}`;
       srvEl.title = srv.name;
+      const iconText = srv.icon || (srv.name ? (srv.name.split(/\s+/).filter(Boolean).length > 1 ? srv.name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').substring(0, 3).toUpperCase() : srv.name.charAt(0).toUpperCase()) : 'S');
       srvEl.innerHTML = `
         <div class="server-pill"></div>
         <div class="server-badge">
-          ${escapeHtml(srv.icon || srv.name.substring(0, 2).toUpperCase())}
+          ${escapeHtml(iconText)}
         </div>
       `;
       srvEl.onclick = () => {
@@ -1984,17 +2002,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 9. Modals & Actions
   // Create Server
-  document.getElementById('btn-submit-create-server').onclick = () => {
+  function handleCreateServerSubmit() {
     const nameInput = document.getElementById('input-server-name');
     const iconInput = document.getElementById('input-server-icon');
     const name = nameInput.value.trim();
-    const icon = iconInput.value.trim() || 'C';
+    const customIcon = iconInput ? iconInput.value.trim().toUpperCase() : '';
 
     if (!name) return;
+
+    let icon = customIcon;
+    if (!icon) {
+      const words = name.split(/\s+/).filter(Boolean);
+      if (words.length > 1) {
+        icon = words.map(w => w[0]).join('').substring(0, 3).toUpperCase();
+      } else {
+        icon = name.charAt(0).toUpperCase();
+      }
+    }
+
     socket.emit('server:create', { name, icon });
     nameInput.value = '';
+    if (iconInput) iconInput.value = '';
     closeModal(modalCreateServer);
-  };
+  }
+
+  document.getElementById('btn-submit-create-server').onclick = handleCreateServerSubmit;
+  const inputServerNameEl = document.getElementById('input-server-name');
+  if (inputServerNameEl) {
+    inputServerNameEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCreateServerSubmit();
+      }
+    });
+  }
+  const inputServerIconEl = document.getElementById('input-server-icon');
+  if (inputServerIconEl) {
+    inputServerIconEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCreateServerSubmit();
+      }
+    });
+  }
 
   // Create Channel Modal
   let selectedChannelType = 'text';
