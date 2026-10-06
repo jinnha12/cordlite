@@ -325,8 +325,8 @@ io.on('connection', (socket) => {
       peers
     });
 
-    // Notify other peers in this room that a new user joined
-    socket.to(`voice:${channelId}`).emit('voice:user_joined', {
+    // Broadcast to room
+    io.to(`voice:${channelId}`).emit('voice:user_joined', {
       socketId: socket.id,
       userId: user.userId,
       name: user.name,
@@ -337,6 +337,24 @@ io.on('connection', (socket) => {
     });
 
     broadcastVoiceStatus();
+  });
+
+  // Direct Server Audio Relay (WebSocket Audio Stream)
+  socket.on('voice:audio_stream', ({ channelId, audioData, sampleRate }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || user.voiceChannelId !== channelId || user.isMuted) return;
+
+    // Relay audio chunk to all other users in this voice channel
+    socket.to(`voice:${channelId}`).emit('voice:audio_stream', {
+      fromSocketId: socket.id,
+      fromUser: {
+        userId: user.userId,
+        name: user.name,
+        avatarColor: user.avatarColor
+      },
+      audioData,
+      sampleRate
+    });
   });
 
   // WebRTC Signal forwarding (offer, answer, ICE candidate)
