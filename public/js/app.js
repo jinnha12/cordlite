@@ -88,7 +88,216 @@ document.addEventListener('DOMContentLoaded', () => {
     userAvatarBadge.style.backgroundColor = user.avatarColor;
     userAvatarBadge.textContent = user.name.charAt(0).toUpperCase();
     userDisplayName.textContent = user.name;
+    const userBar = document.querySelector('.user-bar');
+    if (userBar) {
+      userBar.oncontextmenu = (e) => showUserContextMenu(e, user);
+    }
   }
+
+  // Discord Context Menu Logic
+  const contextMenu = document.getElementById('discord-context-menu');
+
+  function closeContextMenu() {
+    if (contextMenu) {
+      contextMenu.style.display = 'none';
+      contextMenu.innerHTML = '';
+    }
+  }
+
+  function showUserContextMenu(e, targetUser) {
+    if (!targetUser || !contextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const isMe = targetUser.userId === user.userId;
+    const isLocallyMuted = !isMe && voiceManager.isPeerLocallyMuted(targetUser.socketId, targetUser.userId);
+    const peerVol = !isMe ? Math.round(voiceManager.getPeerVolume(targetUser.socketId, targetUser.userId) * 100) : 100;
+    const targetSocketId = targetUser.socketId || null;
+
+    let itemsHtml = '';
+
+    if (isMe) {
+      itemsHtml = `
+        <div class="ctx-item" id="ctx-action-edit-profile">
+          <div class="ctx-item-left"><span>✏️</span><span>Edit Profile</span></div>
+        </div>
+        <div class="ctx-item" id="ctx-action-toggle-mute">
+          <div class="ctx-item-left"><span>${isMuted ? '🎙️' : '🔇'}</span><span>${isMuted ? 'Unmute Microphone' : 'Mute Microphone'}</span></div>
+        </div>
+        <div class="ctx-item" id="ctx-action-toggle-deafen">
+          <div class="ctx-item-left"><span>${isDeafened ? '🎧' : '🔕'}</span><span>${isDeafened ? 'Undeafen Audio' : 'Deafen Audio'}</span></div>
+        </div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item" id="ctx-action-copy-id">
+          <div class="ctx-item-left"><span>📋</span><span>Copy User ID</span></div>
+        </div>
+      `;
+    } else {
+      itemsHtml = `
+        <div class="ctx-item" id="ctx-action-mention">
+          <div class="ctx-item-left"><span>💬</span><span>Mention (@${escapeHtml(targetUser.name)})</span></div>
+        </div>
+        <div class="ctx-item" id="ctx-action-mute-peer">
+          <div class="ctx-item-left">
+            <span>${isLocallyMuted ? '🔇' : '🔊'}</span>
+            <span>Mute User</span>
+          </div>
+          <div class="ctx-checkbox ${isLocallyMuted ? 'checked' : ''}">
+            ${isLocallyMuted ? '✓' : ''}
+          </div>
+        </div>
+
+        <div class="ctx-slider-container">
+          <div class="ctx-slider-header">
+            <span>User Volume</span>
+            <span class="ctx-slider-val" id="ctx-vol-val">${isLocallyMuted ? '0%' : peerVol + '%'}</span>
+          </div>
+          <input type="range" class="ctx-slider-input" id="ctx-vol-slider" min="0" max="150" value="${isLocallyMuted ? 0 : peerVol}" />
+        </div>
+
+        <div class="ctx-divider"></div>
+        <div class="ctx-item" id="ctx-action-copy-name">
+          <div class="ctx-item-left"><span>📋</span><span>Copy Nickname</span></div>
+        </div>
+        <div class="ctx-item" id="ctx-action-copy-id">
+          <div class="ctx-item-left"><span>📋</span><span>Copy User ID</span></div>
+        </div>
+      `;
+    }
+
+    contextMenu.innerHTML = `
+      <div class="ctx-user-header">
+        <div class="ctx-user-avatar" style="background-color: ${targetUser.avatarColor || '#5865F2'}">
+          ${(targetUser.name || 'U').charAt(0).toUpperCase()}
+        </div>
+        <div class="ctx-user-info">
+          <span class="ctx-user-name">${escapeHtml(targetUser.name || 'User')}${isMe ? ' (You)' : ''}</span>
+          <span class="ctx-user-sub">ID: ${escapeHtml((targetUser.userId || 'usr').substring(0, 10))}</span>
+        </div>
+      </div>
+      <div class="ctx-divider"></div>
+      ${itemsHtml}
+    `;
+
+    // Position menu safely
+    contextMenu.style.display = 'flex';
+    contextMenu.style.visibility = 'hidden';
+    contextMenu.style.left = '0px';
+    contextMenu.style.top = '0px';
+
+    const menuWidth = contextMenu.offsetWidth || 240;
+    const menuHeight = contextMenu.offsetHeight || 240;
+
+    const posX = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 12));
+    const posY = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 12));
+
+    contextMenu.style.left = `${posX}px`;
+    contextMenu.style.top = `${posY}px`;
+    contextMenu.style.visibility = 'visible';
+
+    // Hook action handlers
+    if (isMe) {
+      const editBtn = document.getElementById('ctx-action-edit-profile');
+      if (editBtn) {
+        editBtn.onclick = () => {
+          closeContextMenu();
+          document.getElementById('input-profile-name').value = user.name;
+          document.querySelectorAll('.color-dot').forEach(dot => {
+            dot.classList.toggle('selected', dot.dataset.color === user.avatarColor);
+          });
+          openModal(modalProfile);
+        };
+      }
+      const muteBtn = document.getElementById('ctx-action-toggle-mute');
+      if (muteBtn) {
+        muteBtn.onclick = () => {
+          closeContextMenu();
+          const muted = voiceManager.toggleMute();
+          updateMuteButtons(muted);
+        };
+      }
+      const deafenBtn = document.getElementById('ctx-action-toggle-deafen');
+      if (deafenBtn) {
+        deafenBtn.onclick = () => {
+          closeContextMenu();
+          const state = voiceManager.toggleDeafen();
+          updateMuteButtons(state.isMuted);
+          updateDeafenButtons(state.isDeafened);
+        };
+      }
+      const copyIdBtn = document.getElementById('ctx-action-copy-id');
+      if (copyIdBtn) {
+        copyIdBtn.onclick = () => {
+          closeContextMenu();
+          navigator.clipboard.writeText(user.userId);
+          showToast('Copied your User ID!');
+        };
+      }
+    } else {
+      const mentionBtn = document.getElementById('ctx-action-mention');
+      if (mentionBtn) {
+        mentionBtn.onclick = () => {
+          closeContextMenu();
+          if (chatTextInput) {
+            chatTextInput.value += `@${targetUser.name} `;
+            chatTextInput.focus();
+          }
+        };
+      }
+      const mutePeerBtn = document.getElementById('ctx-action-mute-peer');
+      if (mutePeerBtn) {
+        mutePeerBtn.onclick = () => {
+          closeContextMenu();
+          const nowMuted = voiceManager.toggleMutePeer(targetSocketId, targetUser.userId);
+          showToast(nowMuted ? `Muted ${targetUser.name} for you` : `Unmuted ${targetUser.name}`);
+          renderVoiceStage();
+          renderMembers();
+        };
+      }
+      const volSlider = document.getElementById('ctx-vol-slider');
+      const volVal = document.getElementById('ctx-vol-val');
+      if (volSlider) {
+        volSlider.oninput = (ev) => {
+          const val = parseInt(ev.target.value, 10);
+          voiceManager.setPeerVolume(targetSocketId, targetUser.userId, val / 100);
+          volVal.textContent = val + '%';
+          renderVoiceStage();
+          renderMembers();
+        };
+      }
+      const copyNameBtn = document.getElementById('ctx-action-copy-name');
+      if (copyNameBtn) {
+        copyNameBtn.onclick = () => {
+          closeContextMenu();
+          navigator.clipboard.writeText(targetUser.name);
+          showToast(`Copied "${targetUser.name}"!`);
+        };
+      }
+      const copyIdBtn = document.getElementById('ctx-action-copy-id');
+      if (copyIdBtn) {
+        copyIdBtn.onclick = () => {
+          closeContextMenu();
+          navigator.clipboard.writeText(targetUser.userId);
+          showToast('Copied User ID!');
+        };
+      }
+    }
+  }
+
+  // Dismiss listeners
+  document.addEventListener('click', (e) => {
+    if (contextMenu && !contextMenu.contains(e.target)) {
+      closeContextMenu();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeContextMenu();
+    }
+  });
+
+  window.addEventListener('resize', closeContextMenu);
 
   renderUserBar();
 
@@ -334,6 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <span>${escapeHtml(u.name)}</span>
           `;
+          userItem.oncontextmenu = (e) => showUserContextMenu(e, u);
           userList.appendChild(userItem);
         });
         wrapper.appendChild(userList);
@@ -420,6 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ${isDeafened ? '<span class="tile-icon-muted">🎧</span>' : ''}
       </div>
     `;
+    myTile.oncontextmenu = (e) => showUserContextMenu(e, user);
     voiceGrid.appendChild(myTile);
 
     // 2. Peer Tiles
@@ -479,6 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
 
+      tile.oncontextmenu = (e) => showUserContextMenu(e, peer);
       voiceGrid.appendChild(tile);
     }
   }
@@ -553,6 +765,17 @@ document.addEventListener('DOMContentLoaded', () => {
         ${attachmentHtml}
       </div>
     `;
+
+    const authorEl = card.querySelector('.message-author');
+    const avatarEl = card.querySelector('.message-avatar');
+    if (authorEl) {
+      authorEl.oncontextmenu = (e) => showUserContextMenu(e, msg.user);
+      authorEl.onclick = (e) => showUserContextMenu(e, msg.user);
+    }
+    if (avatarEl) {
+      avatarEl.oncontextmenu = (e) => showUserContextMenu(e, msg.user);
+      avatarEl.onclick = (e) => showUserContextMenu(e, msg.user);
+    }
 
     messagesFeed.appendChild(card);
     scrollToBottom();
@@ -663,6 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      item.oncontextmenu = (e) => showUserContextMenu(e, m);
       membersSidebar.appendChild(item);
     });
 
@@ -694,6 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
           selectServer(m.serverId);
           showToast(`Joined ${m.serverName}!`);
         };
+        item.oncontextmenu = (e) => showUserContextMenu(e, m);
         membersSidebar.appendChild(item);
       });
     }

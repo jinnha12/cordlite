@@ -1336,3 +1336,180 @@ body {
     display: none;
   }
 }
+
+/* Discord User Context Menu */
+.discord-context-menu {
+  position: fixed;
+  background-color: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8);
+  min-width: 240px;
+  max-width: 290px;
+  padding: 8px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  animation: contextMenuFadeIn 0.12s ease-out;
+  user-select: none;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ctx-user-header {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.ctx-user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.ctx-user-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ctx-user-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-header);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctx-user-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ctx-divider {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.ctx-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ctx-item:hover {
+  background-color: var(--blurple);
+  color: #ffffff;
+}
+
+.ctx-item.danger {
+  color: var(--red);
+}
+
+.ctx-item.danger:hover {
+  background-color: var(--red);
+  color: #ffffff;
+}
+
+.ctx-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.1s ease;
+}
+
+.ctx-checkbox.checked {
+  background-color: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.ctx-slider-container {
+  padding: 8px 10px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ctx-slider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.ctx-slider-val {
+  color: var(--text-header);
+  font-weight: 700;
+}
+
+.ctx-slider-input {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.ctx-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--blurple);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.ctx-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
