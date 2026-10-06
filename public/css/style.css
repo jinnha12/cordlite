@@ -1525,3 +1525,373 @@ body {
 .ctx-slider-input::-webkit-slider-thumb:hover {
   transform: scale(1.25);
 }
+
+/* ========================================================
+   FEATURE 1: WebRTC Video & Screen Sharing Styles
+   ======================================================== */
+.stage-btn.active {
+  background-color: var(--green) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(35, 165, 90, 0.4);
+}
+
+.stage-btn.active-screen {
+  background-color: var(--blurple) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);
+}
+
+.voice-tile.screen-sharing {
+  grid-column: 1 / -1;
+  aspect-ratio: 16/9;
+  min-height: 380px;
+  background-color: #000;
+}
+
+.voice-tile-video-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-tile-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+}
+
+.voice-tile.screen-sharing .voice-tile-video-wrap video {
+  object-fit: contain;
+}
+
+.live-stream-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background-color: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 6;
+  text-transform: uppercase;
+}
+
+/* ========================================================
+   FEATURE 2: Push-to-Talk (PTT) Styles
+   ======================================================== */
+.settings-section {
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+}
+
+.input-mode-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ptt-keybind-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#btn-ptt-keybind {
+  min-width: 110px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+#btn-ptt-keybind.recording {
+  background-color: var(--blurple);
+  border-color: #fff;
+  animation: pulse-ptt 1s infinite alternate;
+}
+
+@keyframes pulse-ptt {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.04); }
+}
+
+.ptt-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ========================================================
+   FEATURE 3: Custom Avatar Upload Styles
+   ======================================================== */
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar-preview-box {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background-color: var(--blurple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.avatar-preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-upload-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-avatar-badge img,
+.member-avatar img,
+.message-avatar img,
+.voice-tile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ========================================================
+   FEATURE 4: Soundboard Drawer & Cards
+   ======================================================== */
+.soundboard-modal-window {
+  max-width: 560px;
+  width: 95%;
+}
+
+.soundboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.soundboard-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-normal);
+}
+
+.soundboard-card:hover {
+  background-color: var(--bg-secondary-alt);
+  border-color: var(--blurple);
+  transform: translateY(-2px);
+  color: #fff;
+}
+
+.soundboard-card:active {
+  transform: scale(0.96);
+}
+
+.soundboard-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: rgba(88, 101, 242, 0.15);
+  color: var(--blurple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.soundboard-card:hover .soundboard-card-icon {
+  background-color: var(--blurple);
+  color: #fff;
+}
+
+.soundboard-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.soundboard-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ========================================================
+   FEATURE 5: Message Reactions & Floating Picker
+   ======================================================== */
+.message-card {
+  position: relative;
+}
+
+.message-actions-bar {
+  position: absolute;
+  top: -14px;
+  right: 18px;
+  background-color: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  display: none;
+  align-items: center;
+  padding: 2px 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.message-card:hover .message-actions-bar {
+  display: flex;
+}
+
+.btn-msg-react {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-msg-react:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.reaction-picker-popover {
+  position: fixed;
+  background-color: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+}
+
+.reaction-picker-grid {
+  display: flex;
+  gap: 6px;
+}
+
+.reaction-picker-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reaction-picker-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--blurple);
+  transform: scale(1.15);
+}
+
+.message-reactions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.reaction-pill {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.reaction-pill:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.reaction-pill.reacted {
+  background-color: rgba(88, 101, 242, 0.18);
+  border-color: var(--blurple);
+  color: #fff;
+}
+
+.reaction-pill-icon {
+  display: flex;
+  align-items: center;
+  color: var(--blurple);
+}
+
+.reaction-pill-count {
+  font-size: 11px;
+}
+

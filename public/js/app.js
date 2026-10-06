@@ -1,5 +1,6 @@
 /**
  * CordLite Main Application Logic
+ * Pure Discord aesthetics with zero emojis - 100% SVG icons
  */
 document.addEventListener('DOMContentLoaded', () => {
   // State
@@ -15,6 +16,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let isMuted = false;
   let isDeafened = false;
   let isLocalSpeaking = false;
+  let cachedMessages = [];
+
+  // PTT State
+  let currentInputMode = localStorage.getItem('cordlite_input_mode') || 'vad';
+  let currentPttKey = localStorage.getItem('cordlite_ptt_key') || 'Space';
+  let isRecordingPttKey = false;
+  let tempAvatarUrl = user.avatarUrl || null;
+  let activeReactionMessageId = null;
 
   // DOM Elements
   const serverRail = document.getElementById('server-rail');
@@ -47,21 +56,29 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnStageMute = document.getElementById('btn-stage-mute');
   const btnStageDeafen = document.getElementById('btn-stage-deafen');
   const btnStageDisconnect = document.getElementById('btn-stage-disconnect');
+  const btnStageCamera = document.getElementById('btn-stage-camera');
+  const btnStageScreenshare = document.getElementById('btn-stage-screenshare');
+  const btnStageSoundboard = document.getElementById('btn-stage-soundboard');
 
   const membersSidebar = document.getElementById('members-sidebar');
   const toastNotification = document.getElementById('toast-notification');
 
-  // Modals
+  // Modals & Popovers
   const modalCreateServer = document.getElementById('modal-create-server');
   const modalCreateChannel = document.getElementById('modal-create-channel');
   const modalInvite = document.getElementById('modal-invite');
   const modalProfile = document.getElementById('modal-profile');
+  const soundboardModal = document.getElementById('soundboard-modal');
+  const reactionPickerPopover = document.getElementById('reaction-picker-popover');
 
   // 1. Initialize User Profile
   function getOrInitUser() {
     let saved = localStorage.getItem('cordlite_user');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.userId) return parsed;
+      } catch (e) {}
     }
     const colors = ['#5865F2', '#eb459e', '#57f287', '#fee75c', '#ed4245', '#00a8fc'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
@@ -69,24 +86,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const defaultUser = {
       userId: 'usr-' + Math.random().toString(36).substring(2, 9),
       name: `User${randomNum}`,
-      avatarColor: randomColor
+      avatarColor: randomColor,
+      avatarUrl: null
     };
     localStorage.setItem('cordlite_user', JSON.stringify(defaultUser));
     return defaultUser;
   }
 
-  function updateUserProfile(name, avatarColor) {
+  function updateUserProfile(name, avatarColor, avatarUrl) {
     user.name = name || user.name;
     user.avatarColor = avatarColor || user.avatarColor;
+    if (avatarUrl !== undefined) {
+      user.avatarUrl = avatarUrl;
+    }
     voiceManager.user = user;
     localStorage.setItem('cordlite_user', JSON.stringify(user));
-    socket.emit('user:update', { name: user.name, avatarColor: user.avatarColor });
+    socket.emit('user:update', {
+      name: user.name,
+      avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl
+    });
     renderUserBar();
+    renderMembers();
+    renderVoiceStage();
   }
 
   function renderUserBar() {
-    userAvatarBadge.style.backgroundColor = user.avatarColor;
-    userAvatarBadge.textContent = user.name.charAt(0).toUpperCase();
+    if (user.avatarUrl) {
+      userAvatarBadge.innerHTML = `<img src="${user.avatarUrl}" alt="${escapeHtml(user.name)}"><div class="status-dot"></div>`;
+      userAvatarBadge.style.backgroundColor = 'transparent';
+    } else {
+      userAvatarBadge.style.backgroundColor = user.avatarColor;
+      userAvatarBadge.innerHTML = `${escapeHtml(user.name.charAt(0).toUpperCase())}<div class="status-dot"></div>`;
+    }
     userDisplayName.textContent = user.name;
     const userBar = document.querySelector('.user-bar');
     if (userBar) {
@@ -112,14 +144,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMe = targetUser.userId === user.userId;
     const isLocallyMuted = !isMe && voiceManager.isPeerLocallyMuted(targetUser.socketId, targetUser.userId);
     const peerVol = !isMe ? Math.round(voiceManager.getPeerVolume(targetUser.socketId, targetUser.userId) * 100) : 100;
-    const targetSocketId = targetUser.socketId || null;
 
     let itemsHtml = '';
 
     if (isMe) {
       itemsHtml = `
         <div class="ctx-item" id="ctx-action-edit-profile">
-          <div class="ctx-item-left"><span>${window.ICONS.edit}</span><span>Edit Profile</span></div>
+          <div class="ctx-item-left"><span>${window.ICONS.edit}</span><span>Edit Profile & Avatar</span></div>
         </div>
         <div class="ctx-item" id="ctx-action-toggle-mute">
           <div class="ctx-item-left"><span>${isMuted ? window.ICONS.micMuted : window.ICONS.mic}</span><span>${isMuted ? 'Unmute Microphone' : 'Mute Microphone'}</span></div>
@@ -149,155 +180,115 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="ctx-slider-container">
           <div class="ctx-slider-header">
-            <span>User Volume</span>
+            <span>USER VOLUME</span>
             <span class="ctx-slider-val" id="ctx-vol-val">${isLocallyMuted ? '0%' : peerVol + '%'}</span>
           </div>
           <input type="range" class="ctx-slider-input" id="ctx-vol-slider" min="0" max="150" value="${isLocallyMuted ? 0 : peerVol}" />
         </div>
 
         <div class="ctx-divider"></div>
-        <div class="ctx-item" id="ctx-action-copy-name">
-          <div class="ctx-item-left"><span>${window.ICONS.copy}</span><span>Copy Nickname</span></div>
-        </div>
         <div class="ctx-item" id="ctx-action-copy-id">
           <div class="ctx-item-left"><span>${window.ICONS.copy}</span><span>Copy User ID</span></div>
         </div>
       `;
     }
 
-    contextMenu.innerHTML = `
-      <div class="ctx-user-header">
-        <div class="ctx-user-avatar" style="background-color: ${targetUser.avatarColor || '#5865F2'}">
-          ${(targetUser.name || 'U').charAt(0).toUpperCase()}
-        </div>
-        <div class="ctx-user-info">
-          <span class="ctx-user-name">${escapeHtml(targetUser.name || 'User')}${isMe ? ' (You)' : ''}</span>
-          <span class="ctx-user-sub">ID: ${escapeHtml((targetUser.userId || 'usr').substring(0, 10))}</span>
-        </div>
-      </div>
-      <div class="ctx-divider"></div>
-      ${itemsHtml}
-    `;
+    contextMenu.innerHTML = itemsHtml;
+    contextMenu.style.display = 'block';
 
-    // Position menu safely
-    contextMenu.style.display = 'flex';
-    contextMenu.style.visibility = 'hidden';
-    contextMenu.style.left = '0px';
-    contextMenu.style.top = '0px';
+    const menuWidth = 220;
+    const menuHeight = contextMenu.offsetHeight || 200;
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
 
-    const menuWidth = contextMenu.offsetWidth || 240;
-    const menuHeight = contextMenu.offsetHeight || 240;
+    let posX = e.clientX;
+    let posY = e.clientY;
 
-    const posX = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 12));
-    const posY = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 12));
+    if (posX + menuWidth > winWidth) posX = winWidth - menuWidth - 10;
+    if (posY + menuHeight > winHeight) posY = winHeight - menuHeight - 10;
 
-    contextMenu.style.left = `${posX}px`;
-    contextMenu.style.top = `${posY}px`;
-    contextMenu.style.visibility = 'visible';
+    contextMenu.style.left = `${Math.max(10, posX)}px`;
+    contextMenu.style.top = `${Math.max(10, posY)}px`;
 
-    // Hook action handlers
-    if (isMe) {
-      const editBtn = document.getElementById('ctx-action-edit-profile');
-      if (editBtn) {
-        editBtn.onclick = () => {
-          closeContextMenu();
-          document.getElementById('input-profile-name').value = user.name;
-          document.querySelectorAll('.color-dot').forEach(dot => {
-            dot.classList.toggle('selected', dot.dataset.color === user.avatarColor);
-          });
-          openModal(modalProfile);
-        };
-      }
-      const muteBtn = document.getElementById('ctx-action-toggle-mute');
-      if (muteBtn) {
-        muteBtn.onclick = () => {
-          closeContextMenu();
-          const muted = voiceManager.toggleMute();
-          updateMuteButtons(muted);
-        };
-      }
-      const deafenBtn = document.getElementById('ctx-action-toggle-deafen');
-      if (deafenBtn) {
-        deafenBtn.onclick = () => {
-          closeContextMenu();
-          const state = voiceManager.toggleDeafen();
-          updateMuteButtons(state.isMuted);
-          updateDeafenButtons(state.isDeafened);
-        };
-      }
-      const copyIdBtn = document.getElementById('ctx-action-copy-id');
-      if (copyIdBtn) {
-        copyIdBtn.onclick = () => {
-          closeContextMenu();
-          navigator.clipboard.writeText(user.userId);
-          showToast('Copied your User ID!');
-        };
-      }
-    } else {
-      const mentionBtn = document.getElementById('ctx-action-mention');
-      if (mentionBtn) {
-        mentionBtn.onclick = () => {
-          closeContextMenu();
-          if (chatTextInput) {
-            chatTextInput.value += `@${targetUser.name} `;
-            chatTextInput.focus();
-          }
-        };
-      }
-      const mutePeerBtn = document.getElementById('ctx-action-mute-peer');
-      if (mutePeerBtn) {
-        mutePeerBtn.onclick = () => {
-          closeContextMenu();
-          const nowMuted = voiceManager.toggleMutePeer(targetSocketId, targetUser.userId);
-          showToast(nowMuted ? `Muted ${targetUser.name} for you` : `Unmuted ${targetUser.name}`);
-          renderVoiceStage();
-          renderMembers();
-        };
-      }
-      const volSlider = document.getElementById('ctx-vol-slider');
-      const volVal = document.getElementById('ctx-vol-val');
-      if (volSlider) {
-        volSlider.oninput = (ev) => {
-          const val = parseInt(ev.target.value, 10);
-          voiceManager.setPeerVolume(targetSocketId, targetUser.userId, val / 100);
-          volVal.textContent = val + '%';
-          renderVoiceStage();
-          renderMembers();
-        };
-      }
-      const copyNameBtn = document.getElementById('ctx-action-copy-name');
-      if (copyNameBtn) {
-        copyNameBtn.onclick = () => {
-          closeContextMenu();
-          navigator.clipboard.writeText(targetUser.name);
-          showToast(`Copied "${targetUser.name}"!`);
-        };
-      }
-      const copyIdBtn = document.getElementById('ctx-action-copy-id');
-      if (copyIdBtn) {
-        copyIdBtn.onclick = () => {
-          closeContextMenu();
-          navigator.clipboard.writeText(targetUser.userId);
-          showToast('Copied User ID!');
-        };
-      }
+    // Wire Context Menu Click Actions
+    const editProfileBtn = document.getElementById('ctx-action-edit-profile');
+    if (editProfileBtn) {
+      editProfileBtn.onclick = () => {
+        closeContextMenu();
+        btnUserSettings.click();
+      };
+    }
+
+    const toggleMuteBtn = document.getElementById('ctx-action-toggle-mute');
+    if (toggleMuteBtn) {
+      toggleMuteBtn.onclick = () => {
+        closeContextMenu();
+        btnToggleMute.click();
+      };
+    }
+
+    const toggleDeafenBtn = document.getElementById('ctx-action-toggle-deafen');
+    if (toggleDeafenBtn) {
+      toggleDeafenBtn.onclick = () => {
+        closeContextMenu();
+        btnToggleDeafen.click();
+      };
+    }
+
+    const copyIdBtn = document.getElementById('ctx-action-copy-id');
+    if (copyIdBtn) {
+      copyIdBtn.onclick = () => {
+        navigator.clipboard.writeText(targetUser.userId);
+        showToast('User ID copied to clipboard');
+        closeContextMenu();
+      };
+    }
+
+    const mentionBtn = document.getElementById('ctx-action-mention');
+    if (mentionBtn) {
+      mentionBtn.onclick = () => {
+        chatTextInput.value = `@${targetUser.name} ` + chatTextInput.value;
+        chatTextInput.focus();
+        closeContextMenu();
+      };
+    }
+
+    const mutePeerBtn = document.getElementById('ctx-action-mute-peer');
+    if (mutePeerBtn) {
+      mutePeerBtn.onclick = () => {
+        const nowMuted = voiceManager.toggleMutePeer(targetUser.socketId, targetUser.userId);
+        showToast(nowMuted ? `Muted ${targetUser.name} for you` : `Unmuted ${targetUser.name}`);
+        closeContextMenu();
+        renderVoiceStage();
+        renderMembers();
+      };
+    }
+
+    const volSlider = document.getElementById('ctx-vol-slider');
+    const volVal = document.getElementById('ctx-vol-val');
+    if (volSlider && volVal) {
+      volSlider.oninput = (ev) => {
+        const val = parseInt(ev.target.value, 10);
+        voiceManager.setPeerVolume(targetUser.socketId, targetUser.userId, val / 100);
+        volVal.textContent = val + '%';
+        renderVoiceStage();
+      };
     }
   }
 
-  // Dismiss listeners
-  document.addEventListener('click', (e) => {
-    if (contextMenu && !contextMenu.contains(e.target)) {
+  window.addEventListener('click', (e) => {
+    if (!e.target.closest('#discord-context-menu')) {
       closeContextMenu();
+    }
+    if (!e.target.closest('#reaction-picker-popover') && !e.target.closest('.btn-msg-react')) {
+      closeReactionPicker();
     }
   });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeContextMenu();
-    }
+  window.addEventListener('resize', () => {
+    closeContextMenu();
+    closeReactionPicker();
   });
-
-  window.addEventListener('resize', closeContextMenu);
 
   renderUserBar();
 
@@ -312,6 +303,16 @@ document.addEventListener('DOMContentLoaded', () => {
     renderVoiceStage();
     renderVoiceChannelsOccupancy();
   });
+
+  // Feature 1: Video stream attach callback
+  voiceManager.onPeerVideoUpdate = () => {
+    renderVoiceStage();
+  };
+
+  // Feature 4: Soundboard playback announcement
+  voiceManager.onSoundboardPlayed = ({ fromName, soundId }) => {
+    showToast(`${fromName || 'Someone'} played: ${soundId}`);
+  };
 
   // 2. Socket Event Listeners
   socket.on('connect', () => {
@@ -330,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
       userId: user.userId,
       name: user.name,
       avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
       serverId: inviteServerId || 'friends-hangout'
     });
   });
@@ -401,16 +403,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   socket.on('chat:history', ({ channelId, messages }) => {
     if (currentChannel && currentChannel.id === channelId) {
-      renderChatMessages(messages);
+      cachedMessages = messages || [];
+      renderChatMessages(cachedMessages);
     }
   });
 
   socket.on('chat:message', (message) => {
     if (currentChannel && currentChannel.id === message.channelId) {
+      cachedMessages.push(message);
       appendChatMessage(message);
       if (message.user.id !== user.userId) {
         window.audioManager.playMessage();
       }
+    }
+  });
+
+  // Feature 5: Real-time Message Reaction Update
+  socket.on('chat:reaction_updated', ({ channelId, messageId, reactions }) => {
+    if (currentChannel && currentChannel.id === channelId) {
+      const msg = cachedMessages.find(m => m.id === messageId);
+      if (msg) {
+        msg.reactions = reactions;
+      }
+      updateMessageReactionsDom(messageId, reactions);
     }
   });
 
@@ -450,125 +465,97 @@ document.addEventListener('DOMContentLoaded', () => {
     homeBtn.title = 'CordLite Home';
     homeBtn.innerHTML = `
       <div class="server-pill"></div>
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
-      </svg>
+      <div class="server-badge" style="background-color: var(--blurple)">
+        ${window.ICONS.compass}
+      </div>
     `;
+    homeBtn.onclick = () => {
+      if (servers.length > 0) selectServer(servers[0].id);
+    };
     serverRail.appendChild(homeBtn);
 
     const divider = document.createElement('div');
-    divider.className = 'server-divider';
+    divider.className = 'server-separator';
     serverRail.appendChild(divider);
 
-    // Helper for server icon (SVG or initials)
-    function getServerIconHtml(srv) {
-      if (srv.icon && srv.icon.includes('<svg')) return srv.icon;
-      if (!srv.icon || srv.icon === '🎮' || srv.icon === '💬') {
-        return window.ICONS.serverDefault;
-      }
-      if (/^[A-Za-z0-9]{1,3}$/.test(srv.icon)) {
-        return `<span style="font-weight: 700; font-size: 14px;">${escapeHtml(srv.icon)}</span>`;
-      }
-      const words = (srv.name || 'Server').split(/\s+/).filter(Boolean);
-      const initials = words.length > 1 ? (words[0][0] + words[1][0]).toUpperCase() : (srv.name || 'S').substring(0, 2).toUpperCase();
-      return `<span style="font-weight: 700; font-size: 14px;">${escapeHtml(initials)}</span>`;
-    }
-
-    // List of servers
-    servers.forEach((srv) => {
-      const occupants = globalUsersMap[srv.id] ? globalUsersMap[srv.id].length : 0;
-      const item = document.createElement('div');
-      item.className = `server-item ${currentServer && currentServer.id === srv.id ? 'active' : ''}`;
-      item.title = `${srv.name} (${occupants} online)`;
-      item.innerHTML = `
+    // List Servers
+    servers.forEach(srv => {
+      const isSelected = currentServer && currentServer.id === srv.id;
+      const srvEl = document.createElement('div');
+      srvEl.className = `server-item ${isSelected ? 'active' : ''}`;
+      srvEl.title = srv.name;
+      srvEl.innerHTML = `
         <div class="server-pill"></div>
-        ${getServerIconHtml(srv)}
-        ${occupants > 0 ? `<div class="server-occupant-badge" style="position: absolute; bottom: -2px; right: -2px; background: var(--green); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 1px 5px; border: 2px solid var(--bg-tertiary);">${occupants}</div>` : ''}
+        <div class="server-badge">
+          ${escapeHtml(srv.icon || srv.name.substring(0, 2).toUpperCase())}
+        </div>
       `;
-      item.onclick = () => selectServer(srv.id);
-      serverRail.appendChild(item);
+      srvEl.onclick = () => selectServer(srv.id);
+      serverRail.appendChild(srvEl);
     });
 
     // Add Server Button (+)
-    const addBtn = document.createElement('div');
-    addBtn.className = 'server-item server-btn-add';
-    addBtn.title = 'Add a Server';
-    addBtn.innerHTML = `
+    const addServerBtn = document.createElement('div');
+    addServerBtn.className = 'server-item';
+    addServerBtn.title = 'Add a Server';
+    addServerBtn.innerHTML = `
       <div class="server-pill"></div>
-      ${window.ICONS.plus}
+      <div class="server-badge add-btn">
+        ${window.ICONS.plus}
+      </div>
     `;
-    addBtn.onclick = () => openModal(modalCreateServer);
-    serverRail.appendChild(addBtn);
+    addServerBtn.onclick = () => openModal(modalCreateServer);
+    serverRail.appendChild(addServerBtn);
   }
 
   function selectServer(serverId) {
     if (currentServer && currentServer.id === serverId) return;
     socket.emit('server:select', { serverId });
+    currentChannel = null;
     renderServerRail();
   }
 
-  // 4. Channel Navigation
+  // 4. Channels Listing & Management
   function renderChannels() {
-    if (!currentServer) return;
+    if (!currentServer || !currentServer.channels) return;
     textChannelsList.innerHTML = '';
     voiceChannelsList.innerHTML = '';
 
-    const textChannels = currentServer.channels.filter(c => c.type === 'text');
-    const voiceChannels = currentServer.channels.filter(c => c.type === 'voice');
+    currentServer.channels.forEach(ch => {
+      const isSelected = currentChannel && currentChannel.id === ch.id;
+      const chEl = document.createElement('div');
+      chEl.className = `channel-item ${isSelected ? 'active' : ''}`;
+      chEl.dataset.id = ch.id;
 
-    textChannels.forEach(c => {
-      const el = document.createElement('div');
-      el.className = `channel-item ${currentChannel && currentChannel.id === c.id ? 'active' : ''}`;
-      el.innerHTML = `
-        <span class="channel-icon">${window.ICONS.hash}</span>
-        <span class="channel-name">${escapeHtml(c.name)}</span>
+      const iconSvg = ch.type === 'text' ? window.ICONS.hash : window.ICONS.speaker;
+      chEl.innerHTML = `
+        <span class="channel-icon">${iconSvg}</span>
+        <span class="channel-name">${escapeHtml(ch.name)}</span>
+        <span class="channel-delete-btn" title="Delete Channel">&times;</span>
       `;
-      el.onclick = () => selectChannel(c.id);
-      textChannelsList.appendChild(el);
-    });
 
-    voiceChannels.forEach(c => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'voice-channel-wrapper';
+      chEl.onclick = (e) => {
+        if (e.target.classList.contains('channel-delete-btn')) {
+          e.stopPropagation();
+          deleteChannel(ch.id);
+          return;
+        }
+        selectChannel(ch.id);
+      };
 
-      const el = document.createElement('div');
-      const isCurrentActive = activeVoiceChannel && activeVoiceChannel.id === c.id;
-      el.className = `channel-item voice-channel ${isCurrentActive ? 'active' : ''}`;
-      el.innerHTML = `
-        <span class="channel-icon">${window.ICONS.speaker}</span>
-        <span class="channel-name">${escapeHtml(c.name)}</span>
-      `;
-      el.onclick = () => joinVoiceChannel(c);
-
-      wrapper.appendChild(el);
-
-      // Render connected voice occupants inside sidebar
-      const usersInChannel = voiceOccupancy[c.id] || [];
-      if (usersInChannel.length > 0) {
-        const userList = document.createElement('div');
-        userList.className = 'channel-voice-users';
-        usersInChannel.forEach(u => {
-          const userItem = document.createElement('div');
-          userItem.className = 'voice-user-item';
-          const isSpeaking = (u.socketId === socket.id && isLocalSpeaking) || u.isSpeaking;
-          userItem.innerHTML = `
-            <div class="voice-user-avatar ${isSpeaking ? 'speaking' : ''}" style="background-color: ${u.avatarColor}">
-              ${u.name.charAt(0).toUpperCase()}
-            </div>
-            <span>${escapeHtml(u.name)}</span>
-          `;
-          userItem.oncontextmenu = (e) => showUserContextMenu(e, u);
-          userList.appendChild(userItem);
-        });
-        wrapper.appendChild(userList);
+      if (ch.type === 'text') {
+        textChannelsList.appendChild(chEl);
+      } else {
+        voiceChannelsList.appendChild(chEl);
       }
-
-      voiceChannelsList.appendChild(wrapper);
     });
+
+    renderVoiceChannelsOccupancy();
   }
 
-  function renderVoiceChannelsOccupancy() {
-    renderChannels();
+  function deleteChannel(channelId) {
+    if (!currentServer) return;
+    socket.emit('channel:delete', { serverId: currentServer.id, channelId });
   }
 
   function selectChannel(channelId) {
@@ -579,7 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentChannel = ch;
     renderChannels();
 
-    topChannelHash.textContent = ch.type === 'text' ? '#' : '🔊';
+    topChannelHash.innerHTML = ch.type === 'text' ? window.ICONS.hash : window.ICONS.speaker;
     topChannelName.textContent = ch.name;
 
     if (ch.type === 'text') {
@@ -618,6 +605,10 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceManager.leaveVoice();
     activeVoiceChannel = null;
     voiceDock.classList.remove('connected');
+
+    // Reset media buttons
+    btnStageCamera.classList.remove('active');
+    btnStageScreenshare.classList.remove('active-screen');
     
     // Switch to first text channel
     if (currentServer) {
@@ -627,37 +618,116 @@ document.addEventListener('DOMContentLoaded', () => {
     renderChannels();
   }
 
+  // Feature 1: Render Voice Stage (Audio + Live Video / Screen Sharing)
   function renderVoiceStage() {
     if (!activeVoiceChannel) return;
     voiceGrid.innerHTML = '';
 
     // 1. My Tile
     const myTile = document.createElement('div');
-    myTile.className = `voice-tile ${isLocalSpeaking && !isMuted ? 'speaking' : ''}`;
+    const isMyScreenSharing = voiceManager.isScreenSharing && voiceManager.localScreenStream;
+    const isMyCameraOn = voiceManager.isCameraOn && voiceManager.localCameraStream;
+
+    myTile.className = `voice-tile ${isLocalSpeaking && !isMuted ? 'speaking' : ''} ${isMyScreenSharing ? 'screen-sharing' : ''}`;
+
+    let myAvatarOrVideoHtml = '';
+    if (isMyScreenSharing) {
+      myAvatarOrVideoHtml = `
+        <div class="voice-tile-video-wrap">
+          <video id="my-screen-video" autoplay muted playsinline></video>
+        </div>
+        <span class="live-stream-badge">${window.ICONS.screenShare} Live Screen</span>
+      `;
+    } else if (isMyCameraOn) {
+      myAvatarOrVideoHtml = `
+        <div class="voice-tile-video-wrap">
+          <video id="my-camera-video" autoplay muted playsinline></video>
+        </div>
+        <span class="live-stream-badge">${window.ICONS.camera} Camera</span>
+      `;
+    } else {
+      if (user.avatarUrl) {
+        myAvatarOrVideoHtml = `
+          <div class="voice-tile-avatar">
+            <img src="${user.avatarUrl}" alt="${escapeHtml(user.name)}" />
+          </div>
+        `;
+      } else {
+        myAvatarOrVideoHtml = `
+          <div class="voice-tile-avatar" style="background-color: ${user.avatarColor}">
+            ${escapeHtml(user.name.charAt(0).toUpperCase())}
+          </div>
+        `;
+      }
+    }
+
     myTile.innerHTML = `
-      <div class="voice-tile-avatar" style="background-color: ${user.avatarColor}">
-        ${user.name.charAt(0).toUpperCase()}
-      </div>
+      ${myAvatarOrVideoHtml}
       <div class="voice-tile-name-tag">
         <span>${escapeHtml(user.name)} (You)</span>
         ${isMuted ? `<span class="tile-icon-muted">${window.ICONS.micMuted}</span>` : ''}
         ${isDeafened ? `<span class="tile-icon-muted">${window.ICONS.deafen}</span>` : ''}
       </div>
     `;
+
     myTile.oncontextmenu = (e) => showUserContextMenu(e, user);
     voiceGrid.appendChild(myTile);
+
+    // Attach local video stream
+    if (isMyScreenSharing) {
+      const vid = myTile.querySelector('#my-screen-video');
+      if (vid) vid.srcObject = voiceManager.localScreenStream;
+    } else if (isMyCameraOn) {
+      const vid = myTile.querySelector('#my-camera-video');
+      if (vid) vid.srcObject = voiceManager.localCameraStream;
+    }
 
     // 2. Peer Tiles
     for (const [_, peer] of voiceManager.peers.entries()) {
       const isLocallyMuted = voiceManager.isPeerLocallyMuted(peer.socketId, peer.userId);
       const peerVol = Math.round(voiceManager.getPeerVolume(peer.socketId, peer.userId) * 100);
       const tile = document.createElement('div');
-      tile.className = `voice-tile ${peer.isSpeaking && !peer.isMuted && !isLocallyMuted ? 'speaking' : ''} ${isLocallyMuted ? 'locally-muted' : ''}`;
+
+      const isPeerScreenSharing = peer.isScreenSharing && peer.videoStream;
+      const isPeerCameraOn = peer.isCameraOn && peer.videoStream;
+
+      tile.className = `voice-tile ${peer.isSpeaking && !peer.isMuted && !isLocallyMuted ? 'speaking' : ''} ${isLocallyMuted ? 'locally-muted' : ''} ${isPeerScreenSharing ? 'screen-sharing' : ''}`;
+
+      let peerAvatarOrVideoHtml = '';
+      if (isPeerScreenSharing) {
+        peerAvatarOrVideoHtml = `
+          <div class="voice-tile-video-wrap">
+            <video class="peer-stream-video" autoplay playsinline></video>
+          </div>
+          <span class="live-stream-badge">${window.ICONS.screenShare} Live Screen</span>
+        `;
+      } else if (isPeerCameraOn) {
+        peerAvatarOrVideoHtml = `
+          <div class="voice-tile-video-wrap">
+            <video class="peer-stream-video" autoplay playsinline></video>
+          </div>
+          <span class="live-stream-badge">${window.ICONS.camera} Camera</span>
+        `;
+      } else {
+        if (peer.avatarUrl) {
+          peerAvatarOrVideoHtml = `
+            <div class="voice-tile-avatar">
+              <img src="${peer.avatarUrl}" alt="${escapeHtml(peer.name)}" />
+              ${isLocallyMuted ? `<span class="avatar-mute-badge" title="Muted for you">${window.ICONS.speakerMuted}</span>` : ''}
+            </div>
+          `;
+        } else {
+          peerAvatarOrVideoHtml = `
+            <div class="voice-tile-avatar" style="background-color: ${peer.avatarColor}">
+              ${escapeHtml(peer.name.charAt(0).toUpperCase())}
+              ${isLocallyMuted ? `<span class="avatar-mute-badge" title="Muted for you">${window.ICONS.speakerMuted}</span>` : ''}
+            </div>
+          `;
+        }
+      }
+
       tile.innerHTML = `
-        <div class="voice-tile-avatar" style="background-color: ${peer.avatarColor}">
-          ${peer.name.charAt(0).toUpperCase()}
-          ${isLocallyMuted ? `<span class="avatar-mute-badge" title="Muted for you">${window.ICONS.speakerMuted}</span>` : ''}
-        </div>
+        ${peerAvatarOrVideoHtml}
 
         <!-- Quick Mute & Volume Control -->
         <div class="voice-tile-actions">
@@ -677,6 +747,12 @@ document.addEventListener('DOMContentLoaded', () => {
           ${peer.isDeafened ? `<span class="tile-icon-muted" title="Deafened">${window.ICONS.deafen}</span>` : ''}
         </div>
       `;
+
+      // Attach peer stream to video
+      if ((isPeerScreenSharing || isPeerCameraOn) && peer.videoStream) {
+        const vid = tile.querySelector('.peer-stream-video');
+        if (vid) vid.srcObject = peer.videoStream;
+      }
 
       // Controls
       const btnMute = tile.querySelector('.btn-peer-mute');
@@ -709,7 +785,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 6. Chat Messaging Logic
+  function renderVoiceChannelsOccupancy() {
+    document.querySelectorAll('.voice-occupant-list').forEach(el => el.remove());
+
+    for (const [channelId, occupants] of Object.entries(voiceOccupancy)) {
+      const chEl = document.querySelector(`.channel-item[data-id="${channelId}"]`);
+      if (!chEl || !occupants || occupants.length === 0) continue;
+
+      let listEl = chEl.nextElementSibling;
+      if (!listEl || !listEl.classList.contains('voice-occupant-list')) {
+        listEl = document.createElement('div');
+        listEl.className = 'voice-occupant-list';
+        chEl.parentNode.insertBefore(listEl, chEl.nextSibling);
+      }
+
+      listEl.innerHTML = occupants.map(occ => {
+        const isSpeaking = occ.isSpeaking;
+        const avatarInner = occ.avatarUrl ? `<img src="${occ.avatarUrl}" alt="${escapeHtml(occ.name)}">` : escapeHtml(occ.name.charAt(0).toUpperCase());
+        return `
+          <div class="voice-occupant-item" data-user-id="${occ.userId}">
+            <div class="occupant-avatar ${isSpeaking ? 'speaking' : ''}" style="background-color: ${occ.avatarUrl ? 'transparent' : occ.avatarColor}">
+              ${avatarInner}
+            </div>
+            <span class="occupant-name">${escapeHtml(occ.name)}</span>
+            ${occ.isScreenSharing ? `<span style="color: var(--blurple); display: flex;" title="Sharing Screen">${window.ICONS.screenShare}</span>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // 6. Chat Messaging Logic (with Feature 5: Reactions)
   function renderChatMessages(messages) {
     const srvName = currentServer ? currentServer.name : 'Hangout';
     const srvId = currentServer ? currentServer.id : 'friends-hangout';
@@ -738,6 +844,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function appendChatMessage(msg) {
     const card = document.createElement('div');
     card.className = 'message-card';
+    card.dataset.msgId = msg.id;
 
     const timeStr = formatTimestamp(msg.timestamp);
 
@@ -766,9 +873,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    const avatarHtml = msg.user.avatarUrl ?
+      `<img src="${msg.user.avatarUrl}" alt="${escapeHtml(msg.user.name)}" />` :
+      escapeHtml(msg.user.name.charAt(0).toUpperCase());
+
+    const avatarBg = msg.user.avatarUrl ? 'transparent' : (msg.user.avatarColor || '#5865F2');
+
+    // Reactions HTML
+    const reactionsHtml = buildReactionsHtml(msg.id, msg.reactions);
+
     card.innerHTML = `
-      <div class="message-avatar" style="background-color: ${msg.user.avatarColor}">
-        ${msg.user.name.charAt(0).toUpperCase()}
+      <div class="message-actions-bar">
+        <button class="btn-msg-react" data-msg-id="${msg.id}" title="Add Reaction">
+          ${window.ICONS.reactionAdd}
+        </button>
+      </div>
+
+      <div class="message-avatar" style="background-color: ${avatarBg}">
+        ${avatarHtml}
       </div>
       <div class="message-content-wrapper">
         <div class="message-header">
@@ -777,8 +899,22 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="message-text">${parseMarkdown(msg.text)}</div>
         ${attachmentHtml}
+        <div class="message-reactions-row" id="reactions-${msg.id}">
+          ${reactionsHtml}
+        </div>
       </div>
     `;
+
+    // Reaction click handling
+    const reactBtn = card.querySelector('.btn-msg-react');
+    if (reactBtn) {
+      reactBtn.onclick = (e) => {
+        e.stopPropagation();
+        openReactionPicker(reactBtn, msg.id);
+      };
+    }
+
+    wireReactionPills(card, msg.id);
 
     const authorEl = card.querySelector('.message-author');
     const avatarEl = card.querySelector('.message-avatar');
@@ -794,6 +930,83 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesFeed.appendChild(card);
     scrollToBottom();
   }
+
+  function buildReactionsHtml(msgId, reactions) {
+    if (!reactions) return '';
+    let html = '';
+    for (const [reactionType, userIds] of Object.entries(reactions)) {
+      if (!userIds || userIds.length === 0) continue;
+      const hasReacted = userIds.includes(user.userId);
+      const iconSvg = window.ICONS[reactionType] || '';
+      html += `
+        <button class="reaction-pill ${hasReacted ? 'reacted' : ''}" data-msg-id="${msgId}" data-reaction="${reactionType}">
+          <span class="reaction-pill-icon">${iconSvg}</span>
+          <span class="reaction-pill-count">${userIds.length}</span>
+        </button>
+      `;
+    }
+    return html;
+  }
+
+  function wireReactionPills(container, msgId) {
+    container.querySelectorAll('.reaction-pill').forEach(pill => {
+      pill.onclick = (e) => {
+        e.stopPropagation();
+        const reactionType = pill.dataset.reaction;
+        toggleMessageReaction(msgId, reactionType);
+      };
+    });
+  }
+
+  function updateMessageReactionsDom(messageId, reactions) {
+    const row = document.getElementById(`reactions-${messageId}`);
+    if (row) {
+      row.innerHTML = buildReactionsHtml(messageId, reactions);
+      wireReactionPills(row, messageId);
+    }
+  }
+
+  function toggleMessageReaction(messageId, reactionType) {
+    if (!currentServer || !currentChannel) return;
+    socket.emit('chat:reaction', {
+      serverId: currentServer.id,
+      channelId: currentChannel.id,
+      messageId,
+      reactionType
+    });
+  }
+
+  // Feature 5: Reaction Picker Floating Popover
+  function openReactionPicker(anchorBtn, messageId) {
+    activeReactionMessageId = messageId;
+    const rect = anchorBtn.getBoundingClientRect();
+    reactionPickerPopover.style.display = 'block';
+
+    const popoverWidth = reactionPickerPopover.offsetWidth || 280;
+    let posX = rect.left - popoverWidth + 30;
+    let posY = rect.top - 46;
+
+    if (posX < 10) posX = 10;
+    if (posY < 10) posY = rect.bottom + 8;
+
+    reactionPickerPopover.style.left = `${posX}px`;
+    reactionPickerPopover.style.top = `${posY}px`;
+  }
+
+  function closeReactionPicker() {
+    reactionPickerPopover.style.display = 'none';
+    activeReactionMessageId = null;
+  }
+
+  document.querySelectorAll('.reaction-picker-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (activeReactionMessageId) {
+        const reactionType = btn.dataset.reaction;
+        toggleMessageReaction(activeReactionMessageId, reactionType);
+        closeReactionPicker();
+      }
+    };
+  });
 
   function sendMessage() {
     const text = chatTextInput.value.trim();
@@ -850,102 +1063,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // 7. Members List
+  // 7. Members Sidebar
   function renderMembers() {
-    const badge = document.getElementById('online-count-badge');
-    if (badge) {
-      badge.textContent = globalAllUsers.length || serverMembers.length || 1;
-    }
-
     membersSidebar.innerHTML = '';
+    const onlineBadge = document.getElementById('online-count-badge');
+    if (onlineBadge) onlineBadge.textContent = serverMembers.length;
 
-    // Section 1: In This Server
-    const thisSection = document.createElement('div');
-    thisSection.className = 'members-section-title';
-    thisSection.textContent = `In This Server — ${serverMembers.length}`;
-    membersSidebar.appendChild(thisSection);
+    const categoryTitle = document.createElement('div');
+    categoryTitle.className = 'members-category-title';
+    categoryTitle.textContent = `ONLINE — ${serverMembers.length}`;
+    membersSidebar.appendChild(categoryTitle);
 
     serverMembers.forEach(m => {
+      const isMutedLocally = voiceManager.isPeerLocallyMuted(m.socketId, m.userId);
       const isMe = m.userId === user.userId;
-      const isLocallyMuted = !isMe && voiceManager.isPeerLocallyMuted(m.socketId, m.userId);
-      const isInSameVoice = !isMe && activeVoiceChannel && m.voiceChannelId === activeVoiceChannel.id;
-      const item = document.createElement('div');
-      item.className = 'member-item';
-      item.innerHTML = `
-        <div class="member-avatar" style="background-color: ${m.avatarColor}">
-          ${m.name.charAt(0).toUpperCase()}
+      const memEl = document.createElement('div');
+      memEl.className = 'member-card';
+
+      const avatarHtml = m.avatarUrl ?
+        `<img src="${m.avatarUrl}" alt="${escapeHtml(m.name)}" />` :
+        escapeHtml(m.name.charAt(0).toUpperCase());
+
+      const avatarBg = m.avatarUrl ? 'transparent' : (m.avatarColor || '#5865F2');
+
+      memEl.innerHTML = `
+        <div class="member-avatar" style="background-color: ${avatarBg}">
+          ${avatarHtml}
           <div class="status-dot"></div>
         </div>
         <div class="member-info">
-          <span class="member-name">${escapeHtml(m.name)}${isMe ? ' (You)' : ''}</span>
-          ${m.voiceChannelId ? `<span class="member-status" style="color: var(--green); display: flex; align-items: center; gap: 4px;">${window.ICONS.speaker} In Voice</span>` : '<span class="member-status">Online</span>'}
+          <div class="member-name">
+            ${escapeHtml(m.name)}
+            ${isMe ? '<span style="font-size: 11px; opacity: 0.6; margin-left: 4px;">(You)</span>' : ''}
+          </div>
+          <div class="member-role">${m.voiceChannelId ? 'In Voice' : 'Online'}</div>
         </div>
-        ${isInSameVoice ? `
-          <button class="btn-member-mute ${isLocallyMuted ? 'active-muted' : ''}" title="${isLocallyMuted ? 'Unmute user' : 'Mute user for you'}">
-            ${isLocallyMuted ? window.ICONS.speakerMuted : window.ICONS.speaker}
-          </button>
-        ` : ''}
+        ${isMutedLocally ? `<span style="color: var(--red); display: flex;" title="Locally Muted">${window.ICONS.speakerMuted}</span>` : ''}
       `;
 
-      if (isInSameVoice) {
-        const btnMute = item.querySelector('.btn-member-mute');
-        if (btnMute) {
-          btnMute.onclick = (e) => {
-            e.stopPropagation();
-            const nowMuted = voiceManager.toggleMutePeer(m.socketId, m.userId);
-            showToast(nowMuted ? `Muted ${m.name} for you` : `Unmuted ${m.name}`);
-            renderVoiceStage();
-            renderMembers();
-          };
-        }
-      }
-
-      item.oncontextmenu = (e) => showUserContextMenu(e, m);
-      membersSidebar.appendChild(item);
+      memEl.oncontextmenu = (e) => showUserContextMenu(e, m);
+      memEl.onclick = (e) => showUserContextMenu(e, m);
+      membersSidebar.appendChild(memEl);
     });
-
-    // Section 2: In Other Hangouts (friends in different servers)
-    const otherUsers = globalAllUsers.filter(u => !currentServer || u.serverId !== currentServer.id);
-    if (otherUsers.length > 0) {
-      const otherSection = document.createElement('div');
-      otherSection.className = 'members-section-title';
-      otherSection.style.marginTop = '18px';
-      otherSection.textContent = `In Other Hangouts — ${otherUsers.length}`;
-      membersSidebar.appendChild(otherSection);
-
-      otherUsers.forEach(m => {
-        const item = document.createElement('div');
-        item.className = 'member-item';
-        item.style.opacity = '0.9';
-        item.innerHTML = `
-          <div class="member-avatar" style="background-color: ${m.avatarColor}">
-            ${m.name.charAt(0).toUpperCase()}
-            <div class="status-dot" style="background-color: var(--yellow);"></div>
-          </div>
-          <div class="member-info" style="flex: 1;">
-            <span class="member-name">${escapeHtml(m.name)}</span>
-            <span class="member-status" style="font-size: 11px; color: var(--text-muted);">in ${escapeHtml(m.serverName)}</span>
-          </div>
-          <button class="btn-jump-server" style="background: var(--blurple); color: #fff; border: none; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;">Join</button>
-        `;
-        item.querySelector('.btn-jump-server').onclick = () => {
-          selectServer(m.serverId);
-          showToast(`Joined ${m.serverName}!`);
-        };
-        item.oncontextmenu = (e) => showUserContextMenu(e, m);
-        membersSidebar.appendChild(item);
-      });
-    }
   }
 
-  const btnToggleMembers = document.getElementById('btn-toggle-members');
-  if (btnToggleMembers) {
-    btnToggleMembers.onclick = () => {
-      membersSidebar.style.display = (membersSidebar.style.display === 'none') ? 'flex' : 'none';
-    };
-  }
-
-  // 8. Mute / Deafen Toggles
+  // 8. Voice Controls & Buttons
   function updateMuteButtons(muted) {
     isMuted = muted;
     btnToggleMute.classList.toggle('active-danger', isMuted);
@@ -987,13 +1149,77 @@ document.addEventListener('DOMContentLoaded', () => {
   btnVoiceDisconnect.onclick = disconnectVoiceChannel;
   btnStageDisconnect.onclick = disconnectVoiceChannel;
 
+  // Feature 1: Camera & Screen Sharing Buttons
+  btnStageCamera.onclick = async () => {
+    if (!activeVoiceChannel) return;
+    const active = await voiceManager.toggleCamera();
+    btnStageCamera.classList.toggle('active', active);
+    btnStageCamera.innerHTML = active ? window.ICONS.cameraOff : window.ICONS.camera;
+    showToast(active ? 'Camera turned on' : 'Camera turned off');
+    renderVoiceStage();
+  };
+
+  btnStageScreenshare.onclick = async () => {
+    if (!activeVoiceChannel) return;
+    const active = await voiceManager.toggleScreenShare();
+    btnStageScreenshare.classList.toggle('active-screen', active);
+    btnStageScreenshare.innerHTML = active ? window.ICONS.screenShareStop : window.ICONS.screenShare;
+    showToast(active ? 'Screen sharing started' : 'Screen sharing stopped');
+    renderVoiceStage();
+  };
+
+  // Feature 4: Soundboard Modal & Buttons
+  btnStageSoundboard.onclick = () => {
+    if (!activeVoiceChannel) {
+      showToast('Join a voice channel to use the soundboard');
+      return;
+    }
+    soundboardModal.style.display = 'flex';
+    soundboardModal.classList.add('open');
+  };
+
+  document.querySelectorAll('.soundboard-card').forEach(card => {
+    card.onclick = () => {
+      const soundId = card.dataset.sound;
+      voiceManager.playSoundboard(soundId);
+      soundboardModal.style.display = 'none';
+      soundboardModal.classList.remove('open');
+      showToast(`Played ${card.querySelector('.soundboard-card-title').textContent}`);
+    };
+  });
+
+  // Feature 2: Push-to-Talk (PTT) Global Key Event Listeners
+  window.addEventListener('keydown', (e) => {
+    // Avoid triggering when typing in text inputs or recording keybind
+    if (isRecordingPttKey) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (voiceManager.inputMode !== 'ptt' || !activeVoiceChannel) return;
+
+    const pressedKey = e.code === 'Space' ? 'Space' : e.key;
+    if (pressedKey.toLowerCase() === currentPttKey.toLowerCase()) {
+      if (!e.repeat) {
+        voiceManager.setPttActive(true);
+      }
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (isRecordingPttKey) return;
+    if (voiceManager.inputMode !== 'ptt' || !activeVoiceChannel) return;
+
+    const pressedKey = e.code === 'Space' ? 'Space' : e.key;
+    if (pressedKey.toLowerCase() === currentPttKey.toLowerCase()) {
+      voiceManager.setPttActive(false);
+    }
+  });
+
   // 9. Modals & Actions
   // Create Server
   document.getElementById('btn-submit-create-server').onclick = () => {
     const nameInput = document.getElementById('input-server-name');
     const iconInput = document.getElementById('input-server-icon');
     const name = nameInput.value.trim();
-    const icon = iconInput.value.trim() || '💬';
+    const icon = iconInput.value.trim() || 'C';
 
     if (!name) return;
     socket.emit('server:create', { name, icon });
@@ -1005,21 +1231,23 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedChannelType = 'text';
   document.querySelectorAll('.radio-card').forEach(card => {
     card.onclick = () => {
-      document.querySelectorAll('.radio-card').forEach(c => c.classList.remove('selected'));
-      card.classList.add('selected');
-      selectedChannelType = card.dataset.type;
+      if (card.dataset.type) {
+        document.querySelectorAll('.radio-card[data-type]').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectedChannelType = card.dataset.type;
+      }
     };
   });
 
   document.getElementById('btn-open-create-text').onclick = () => {
     selectedChannelType = 'text';
-    document.querySelectorAll('.radio-card').forEach(c => c.classList.toggle('selected', c.dataset.type === 'text'));
+    document.querySelectorAll('.radio-card[data-type]').forEach(c => c.classList.toggle('selected', c.dataset.type === 'text'));
     openModal(modalCreateChannel);
   };
 
   document.getElementById('btn-open-create-voice').onclick = () => {
     selectedChannelType = 'voice';
-    document.querySelectorAll('.radio-card').forEach(c => c.classList.toggle('selected', c.dataset.type === 'voice'));
+    document.querySelectorAll('.radio-card[data-type]').forEach(c => c.classList.toggle('selected', c.dataset.type === 'voice'));
     openModal(modalCreateChannel);
   };
 
@@ -1052,29 +1280,143 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Invite link copied to clipboard!');
   };
 
-  // User Profile Settings Modal
+  // User Profile Settings Modal (Features 2 & 3)
+  const inputAvatarFile = document.getElementById('input-avatar-file');
+  const btnBrowseAvatar = document.getElementById('btn-browse-avatar');
+  const btnRemoveAvatar = document.getElementById('btn-remove-avatar');
+  const avatarPreviewText = document.getElementById('avatar-preview-text');
+  const avatarPreviewImg = document.getElementById('avatar-preview-img');
+  const avatarPreviewBox = document.getElementById('avatar-preview-box');
+
+  const optModeVad = document.getElementById('opt-mode-vad');
+  const optModePtt = document.getElementById('opt-mode-ptt');
+  const pttKeybindGroup = document.getElementById('ptt-keybind-group');
+  const btnPttKeybind = document.getElementById('btn-ptt-keybind');
+  const pttKeybindText = document.getElementById('ptt-keybind-text');
+
+  let selectedProfileColor = user.avatarColor;
+
+  function updateAvatarPreview(imgUrl, color, name) {
+    if (imgUrl) {
+      avatarPreviewImg.src = imgUrl;
+      avatarPreviewImg.style.display = 'block';
+      avatarPreviewText.style.display = 'none';
+      avatarPreviewBox.style.backgroundColor = 'transparent';
+      btnRemoveAvatar.style.display = 'inline-block';
+    } else {
+      avatarPreviewImg.style.display = 'none';
+      avatarPreviewText.style.display = 'block';
+      avatarPreviewText.textContent = (name || user.name).charAt(0).toUpperCase();
+      avatarPreviewBox.style.backgroundColor = color || selectedProfileColor;
+      btnRemoveAvatar.style.display = 'none';
+    }
+  }
+
   btnUserSettings.onclick = () => {
     document.getElementById('input-profile-name').value = user.name;
+    tempAvatarUrl = user.avatarUrl || null;
+    selectedProfileColor = user.avatarColor;
+
+    updateAvatarPreview(tempAvatarUrl, selectedProfileColor, user.name);
+
     document.querySelectorAll('.color-dot').forEach(dot => {
       dot.classList.toggle('selected', dot.dataset.color === user.avatarColor);
     });
+
+    // Input mode setup
+    currentInputMode = voiceManager.inputMode || 'vad';
+    currentPttKey = voiceManager.pttKey || 'Space';
+    optModeVad.classList.toggle('selected', currentInputMode === 'vad');
+    optModePtt.classList.toggle('selected', currentInputMode === 'ptt');
+    pttKeybindGroup.style.display = currentInputMode === 'ptt' ? 'block' : 'none';
+    pttKeybindText.textContent = currentPttKey;
+
     openModal(modalProfile);
   };
 
-  let selectedProfileColor = user.avatarColor;
+  btnBrowseAvatar.onclick = () => inputAvatarFile.click();
+
+  inputAvatarFile.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      showToast('Uploading profile image...');
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data.url) {
+        tempAvatarUrl = data.url;
+        updateAvatarPreview(tempAvatarUrl, selectedProfileColor, document.getElementById('input-profile-name').value);
+        showToast('Image uploaded successfully!');
+      }
+    } catch (err) {
+      console.error('Avatar upload failed:', err);
+      showToast('Avatar upload failed');
+    } finally {
+      inputAvatarFile.value = '';
+    }
+  };
+
+  btnRemoveAvatar.onclick = () => {
+    tempAvatarUrl = null;
+    updateAvatarPreview(null, selectedProfileColor, document.getElementById('input-profile-name').value);
+  };
+
+  optModeVad.onclick = () => {
+    currentInputMode = 'vad';
+    optModeVad.classList.add('selected');
+    optModePtt.classList.remove('selected');
+    pttKeybindGroup.style.display = 'none';
+  };
+
+  optModePtt.onclick = () => {
+    currentInputMode = 'ptt';
+    optModePtt.classList.add('selected');
+    optModeVad.classList.remove('selected');
+    pttKeybindGroup.style.display = 'block';
+  };
+
+  btnPttKeybind.onclick = () => {
+    isRecordingPttKey = true;
+    btnPttKeybind.classList.add('recording');
+    pttKeybindText.textContent = 'Press any key...';
+
+    const onKeyRecord = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const recorded = e.code === 'Space' ? 'Space' : e.key;
+      currentPttKey = recorded;
+      pttKeybindText.textContent = currentPttKey;
+      btnPttKeybind.classList.remove('recording');
+      isRecordingPttKey = false;
+      window.removeEventListener('keydown', onKeyRecord, true);
+    };
+
+    window.addEventListener('keydown', onKeyRecord, true);
+  };
+
   document.querySelectorAll('.color-dot').forEach(dot => {
     dot.onclick = () => {
       document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
       dot.classList.add('selected');
       selectedProfileColor = dot.dataset.color;
+      updateAvatarPreview(tempAvatarUrl, selectedProfileColor, document.getElementById('input-profile-name').value);
     };
   });
 
   document.getElementById('btn-save-profile').onclick = () => {
     const newName = document.getElementById('input-profile-name').value.trim();
     if (newName) {
-      updateUserProfile(newName, selectedProfileColor);
-      showToast('Profile updated!');
+      updateUserProfile(newName, selectedProfileColor, tempAvatarUrl);
+      voiceManager.setInputMode(currentInputMode);
+      voiceManager.pttKey = currentPttKey;
+      localStorage.setItem('cordlite_ptt_key', currentPttKey);
+      showToast('Settings saved successfully!');
       closeModal(modalProfile);
     }
   };
@@ -1082,22 +1424,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // Generic Modal Close
   document.querySelectorAll('.btn-close-modal').forEach(btn => {
     btn.onclick = () => {
-      document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+      document.querySelectorAll('.modal-overlay').forEach(m => {
+        m.classList.remove('open');
+        m.style.display = 'none';
+      });
     };
   });
 
   window.onclick = (e) => {
     if (e.target.classList.contains('modal-overlay')) {
       e.target.classList.remove('open');
+      e.target.style.display = 'none';
     }
   };
 
   function openModal(modal) {
+    modal.style.display = 'flex';
     modal.classList.add('open');
   }
 
   function closeModal(modal) {
     modal.classList.remove('open');
+    modal.style.display = 'none';
   }
 
   function showToast(message) {

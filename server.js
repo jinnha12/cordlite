@@ -170,12 +170,15 @@ io.on('connection', (socket) => {
       userId: userData.userId || socket.id,
       name: userData.name || 'Anonymous',
       avatarColor: userData.avatarColor || '#5865F2',
+      avatarUrl: userData.avatarUrl || null,
       serverId: targetServerId,
       channelId: null,
       voiceChannelId: null,
       isMuted: false,
       isDeafened: false,
-      isSpeaking: false
+      isSpeaking: false,
+      isCameraOn: false,
+      isScreenSharing: false
     });
 
     // Make socket immediately join target server room!
@@ -275,10 +278,12 @@ io.on('connection', (socket) => {
       user: {
         id: user.userId,
         name: user.name,
-        avatarColor: user.avatarColor
+        avatarColor: user.avatarColor,
+        avatarUrl: user.avatarUrl || null
       },
       text: text || '',
       attachment: attachment || null,
+      reactions: {},
       timestamp: Date.now()
     };
 
@@ -290,6 +295,38 @@ io.on('connection', (socket) => {
 
     // Broadcast message to everyone in this server
     io.to(`server:${serverId}`).emit('chat:message', message);
+  });
+
+  // Feature 5: Toggle Message Reaction
+  socket.on('chat:reaction', ({ serverId, channelId, messageId, reactionType }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || !channelId || !messageId || !reactionType) return;
+    if (!db.messages[channelId]) return;
+
+    const msg = db.messages[channelId].find(m => m.id === messageId);
+    if (!msg) return;
+
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[reactionType]) msg.reactions[reactionType] = [];
+
+    const existingIndex = msg.reactions[reactionType].indexOf(user.userId);
+    if (existingIndex > -1) {
+      // Toggle off
+      msg.reactions[reactionType].splice(existingIndex, 1);
+      if (msg.reactions[reactionType].length === 0) {
+        delete msg.reactions[reactionType];
+      }
+    } else {
+      // Toggle on
+      msg.reactions[reactionType].push(user.userId);
+    }
+
+    saveStore();
+    io.to(`server:${serverId}`).emit('chat:reaction_updated', {
+      channelId,
+      messageId,
+      reactions: msg.reactions
+    });
   });
 
   // --- WebRTC Voice Channels Signaling ---
@@ -323,9 +360,12 @@ io.on('connection', (socket) => {
             userId: otherUser.userId,
             name: otherUser.name,
             avatarColor: otherUser.avatarColor,
+            avatarUrl: otherUser.avatarUrl || null,
             isMuted: otherUser.isMuted,
             isDeafened: otherUser.isDeafened,
-            isSpeaking: otherUser.isSpeaking
+            isSpeaking: otherUser.isSpeaking,
+            isCameraOn: otherUser.isCameraOn || false,
+            isScreenSharing: otherUser.isScreenSharing || false
           });
         }
       }
@@ -343,9 +383,12 @@ io.on('connection', (socket) => {
       userId: user.userId,
       name: user.name,
       avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl || null,
       isMuted: user.isMuted,
       isDeafened: user.isDeafened,
-      isSpeaking: user.isSpeaking
+      isSpeaking: user.isSpeaking,
+      isCameraOn: user.isCameraOn || false,
+      isScreenSharing: user.isScreenSharing || false
     });
 
     broadcastVoiceStatus();
@@ -362,14 +405,15 @@ io.on('connection', (socket) => {
       fromUser: {
         userId: user.userId,
         name: user.name,
-        avatarColor: user.avatarColor
+        avatarColor: user.avatarColor,
+        avatarUrl: user.avatarUrl || null
       },
       audioData,
       sampleRate
     });
   });
 
-  // WebRTC Signal forwarding (offer, answer, ICE candidate)
+  // WebRTC Signal forwarding (offer, answer, ICE candidate for voice & video)
   socket.on('voice:signal', ({ toSocketId, signal }) => {
     const sender = activeUsers.get(socket.id);
     if (!sender) return;
@@ -379,9 +423,56 @@ io.on('connection', (socket) => {
       fromUser: {
         userId: sender.userId,
         name: sender.name,
-        avatarColor: sender.avatarColor
+        avatarColor: sender.avatarColor,
+        avatarUrl: sender.avatarUrl || null
       },
       signal
+    });
+  });
+
+  // Feature 1: WebRTC Video / Screen Sharing Signaling
+  socket.on('voice:video_signal', ({ toSocketId, signal, streamType }) => {
+    const sender = activeUsers.get(socket.id);
+    if (!sender) return;
+
+    io.to(toSocketId).emit('voice:video_signal', {
+      fromSocketId: socket.id,
+      fromUser: {
+        userId: sender.userId,
+        name: sender.name,
+        avatarColor: sender.avatarColor,
+        avatarUrl: sender.avatarUrl || null
+      },
+      signal,
+      streamType // 'camera' or 'screen'
+    });
+  });
+
+  // Feature 1: Video & Screen Share state notification
+  socket.on('voice:video_state', ({ channelId, isCameraOn, isScreenSharing }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || !channelId) return;
+
+    user.isCameraOn = !!isCameraOn;
+    user.isScreenSharing = !!isScreenSharing;
+
+    io.to(`voice:${channelId}`).emit('voice:video_state', {
+      socketId: socket.id,
+      userId: user.userId,
+      isCameraOn: user.isCameraOn,
+      isScreenSharing: user.isScreenSharing
+    });
+  });
+
+  // Feature 4: Voice Soundboard Playback
+  socket.on('voice:soundboard', ({ channelId, soundId }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || !channelId) return;
+
+    io.to(`voice:${channelId}`).emit('voice:soundboard', {
+      fromSocketId: socket.id,
+      fromName: user.name,
+      soundId
     });
   });
 
@@ -424,12 +515,13 @@ io.on('connection', (socket) => {
     broadcastVoiceStatus();
   });
 
-  // Update User Profile (Nickname / Avatar Color)
-  socket.on('user:update', ({ name, avatarColor }) => {
+  // Update User Profile (Nickname / Avatar Color / Avatar Picture)
+  socket.on('user:update', ({ name, avatarColor, avatarUrl }) => {
     const user = activeUsers.get(socket.id);
     if (!user) return;
     if (name) user.name = name;
     if (avatarColor) user.avatarColor = avatarColor;
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
 
     broadcastServerPresence();
     if (user.voiceChannelId) {
@@ -437,7 +529,8 @@ io.on('connection', (socket) => {
         socketId: socket.id,
         userId: user.userId,
         name: user.name,
-        avatarColor: user.avatarColor
+        avatarColor: user.avatarColor,
+        avatarUrl: user.avatarUrl || null
       });
     }
   });
@@ -489,9 +582,12 @@ function broadcastServerPresence() {
       userId: user.userId,
       name: user.name,
       avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl || null,
       serverId: user.serverId,
       serverName: srvName,
-      voiceChannelId: user.voiceChannelId
+      voiceChannelId: user.voiceChannelId,
+      isCameraOn: user.isCameraOn || false,
+      isScreenSharing: user.isScreenSharing || false
     };
 
     allUsersList.push(memberObj);
@@ -512,7 +608,16 @@ function broadcastVoiceStatus() {
   for (const [channelId, socketSet] of voiceRooms.entries()) {
     voiceState[channelId] = Array.from(socketSet).map(sid => {
       const u = activeUsers.get(sid);
-      return u ? { socketId: sid, userId: u.userId, name: u.name, avatarColor: u.avatarColor, isSpeaking: u.isSpeaking } : null;
+      return u ? {
+        socketId: sid,
+        userId: u.userId,
+        name: u.name,
+        avatarColor: u.avatarColor,
+        avatarUrl: u.avatarUrl || null,
+        isSpeaking: u.isSpeaking,
+        isCameraOn: u.isCameraOn || false,
+        isScreenSharing: u.isScreenSharing || false
+      } : null;
     }).filter(Boolean);
   }
   io.emit('voice:room_occupancy', voiceState);
