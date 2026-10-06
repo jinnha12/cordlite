@@ -477,24 +477,33 @@ function leaveVoiceChannel(socket, user) {
 }
 
 function broadcastServerPresence() {
-  // Broadcast active members grouped by server
+  const allUsersList = [];
   const serverUsersMap = {};
+
   for (const [_, user] of activeUsers.entries()) {
     if (!user.serverId) continue;
-    if (!serverUsersMap[user.serverId]) serverUsersMap[user.serverId] = [];
-    serverUsersMap[user.serverId].push({
+    const srvName = db.servers[user.serverId] ? db.servers[user.serverId].name : 'Hangout';
+    const memberObj = {
+      socketId: user.socketId,
       userId: user.userId,
       name: user.name,
       avatarColor: user.avatarColor,
+      serverId: user.serverId,
+      serverName: srvName,
       voiceChannelId: user.voiceChannelId
-    });
+    };
+
+    allUsersList.push(memberObj);
+
+    if (!serverUsersMap[user.serverId]) serverUsersMap[user.serverId] = [];
+    serverUsersMap[user.serverId].push(memberObj);
   }
 
   for (const [serverId, members] of Object.entries(serverUsersMap)) {
     io.to(`server:${serverId}`).emit('server:members', { serverId, members });
   }
-  // Global sync event
-  io.emit('server:members_all', serverUsersMap);
+  // Global sync event with all active users
+  io.emit('server:members_all', { serverUsersMap, allUsersList });
 }
 
 function broadcastVoiceStatus() {

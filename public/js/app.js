@@ -204,6 +204,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  let globalAllUsers = [];
+  let globalUsersMap = {};
+
   socket.on('server:members', ({ serverId, members }) => {
     if (currentServer && currentServer.id === serverId) {
       serverMembers = members;
@@ -211,11 +214,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  socket.on('server:members_all', (allMap) => {
-    if (currentServer && allMap[currentServer.id]) {
-      serverMembers = allMap[currentServer.id];
-      renderMembers();
+  socket.on('server:members_all', (data) => {
+    if (data.serverUsersMap) globalUsersMap = data.serverUsersMap;
+    if (data.allUsersList) globalAllUsers = data.allUsersList;
+    if (currentServer && globalUsersMap[currentServer.id]) {
+      serverMembers = globalUsersMap[currentServer.id];
     }
+    renderMembers();
+    renderServerRail();
   });
 
   let voiceOccupancy = {};
@@ -246,12 +252,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // List of servers
     servers.forEach((srv) => {
+      const occupants = globalUsersMap[srv.id] ? globalUsersMap[srv.id].length : 0;
       const item = document.createElement('div');
       item.className = `server-item ${currentServer && currentServer.id === srv.id ? 'active' : ''}`;
-      item.title = srv.name;
+      item.title = `${srv.name} (${occupants} online)`;
       item.innerHTML = `
         <div class="server-pill"></div>
         <span>${srv.icon || srv.name.charAt(0).toUpperCase()}</span>
+        ${occupants > 0 ? `<div class="server-occupant-badge" style="position: absolute; bottom: -2px; right: -2px; background: var(--green); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 1px 5px; border: 2px solid var(--bg-tertiary);">${occupants}</div>` : ''}
       `;
       item.onclick = () => selectServer(srv.id);
       serverRail.appendChild(item);
@@ -565,12 +573,16 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderMembers() {
     const badge = document.getElementById('online-count-badge');
     if (badge) {
-      badge.textContent = serverMembers.length;
+      badge.textContent = globalAllUsers.length || serverMembers.length || 1;
     }
 
-    membersSidebar.innerHTML = `
-      <div class="members-section-title">Online — ${serverMembers.length}</div>
-    `;
+    membersSidebar.innerHTML = '';
+
+    // Section 1: In This Server
+    const thisSection = document.createElement('div');
+    thisSection.className = 'members-section-title';
+    thisSection.textContent = `In This Server — ${serverMembers.length}`;
+    membersSidebar.appendChild(thisSection);
 
     serverMembers.forEach(m => {
       const isMe = m.userId === user.userId;
@@ -588,6 +600,38 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       membersSidebar.appendChild(item);
     });
+
+    // Section 2: In Other Hangouts (friends in different servers)
+    const otherUsers = globalAllUsers.filter(u => !currentServer || u.serverId !== currentServer.id);
+    if (otherUsers.length > 0) {
+      const otherSection = document.createElement('div');
+      otherSection.className = 'members-section-title';
+      otherSection.style.marginTop = '18px';
+      otherSection.textContent = `In Other Hangouts — ${otherUsers.length}`;
+      membersSidebar.appendChild(otherSection);
+
+      otherUsers.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'member-item';
+        item.style.opacity = '0.9';
+        item.innerHTML = `
+          <div class="member-avatar" style="background-color: ${m.avatarColor}">
+            ${m.name.charAt(0).toUpperCase()}
+            <div class="status-dot" style="background-color: var(--yellow);"></div>
+          </div>
+          <div class="member-info" style="flex: 1;">
+            <span class="member-name">${escapeHtml(m.name)}</span>
+            <span class="member-status" style="font-size: 11px; color: var(--text-muted);">in ${escapeHtml(m.serverName)}</span>
+          </div>
+          <button class="btn-jump-server" style="background: var(--blurple); color: #fff; border: none; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: 600;">Join</button>
+        `;
+        item.querySelector('.btn-jump-server').onclick = () => {
+          selectServer(m.serverId);
+          showToast(`Joined ${m.serverName}!`);
+        };
+        membersSidebar.appendChild(item);
+      });
+    }
   }
 
   const btnToggleMembers = document.getElementById('btn-toggle-members');

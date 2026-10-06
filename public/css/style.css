@@ -1160,3 +1160,33 @@ body {
   transform: translateY(0);
   opacity: 1;
 }
+
+/* Responsive Mobile & Tablet Rules */
+@media (max-width: 900px) {
+  #members-sidebar {
+    position: fixed;
+    right: 0;
+    top: 48px;
+    bottom: 0;
+    width: 240px;
+    z-index: 100;
+    box-shadow: -4px 0 16px rgba(0,0,0,0.6);
+  }
+}
+
+@media (max-width: 650px) {
+  #server-rail {
+    width: 56px;
+  }
+  .server-item {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+  #channels-sidebar {
+    width: 190px;
+  }
+  .top-bar-desc {
+    display: none;
+  }
+}
