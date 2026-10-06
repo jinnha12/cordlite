@@ -1192,16 +1192,6 @@ document.addEventListener('DOMContentLoaded', () => {
         tile.innerHTML = `
           ${peerMediaHtml}
 
-          <div class="voice-tile-actions">
-            <button class="btn-peer-mute ${isLocallyMuted ? 'active-muted' : ''}" title="${isLocallyMuted ? 'Unmute this user' : 'Mute this user for you'}">
-              ${isLocallyMuted ? window.ICONS.speakerMuted + ' Unmute' : window.ICONS.speaker + ' Mute'}
-            </button>
-            <div class="peer-vol-wrap">
-              <span class="vol-label">${isLocallyMuted ? '0%' : peerVol + '%'}</span>
-              <input type="range" class="peer-vol-slider" min="0" max="150" value="${isLocallyMuted ? 0 : peerVol}" title="Adjust user volume">
-            </div>
-          </div>
-
           <div class="voice-tile-name-tag">
             <span>${escapeHtml(peer.name)}</span>
             ${isLocallyMuted ? `<span class="tile-icon-local-muted" title="You muted this user">${window.ICONS.speakerMuted} Muted</span>` : ''}
@@ -1219,35 +1209,6 @@ document.addEventListener('DOMContentLoaded', () => {
               vid.play().catch(() => {});
             }
           }
-        }
-
-        const btnMute = tile.querySelector('.btn-peer-mute');
-        const volSlider = tile.querySelector('.peer-vol-slider');
-        const volLabel = tile.querySelector('.vol-label');
-
-        if (btnMute) {
-          btnMute.onclick = (e) => {
-            e.stopPropagation();
-            const nowMuted = voiceManager.toggleMutePeer(peer.socketId, peer.userId);
-            showToast(nowMuted ? `Muted ${peer.name} for you` : `Unmuted ${peer.name}`);
-            renderVoiceStage();
-            renderMembers();
-          };
-        }
-
-        if (volSlider) {
-          volSlider.oninput = (e) => {
-            const val = parseInt(e.target.value, 10);
-            voiceManager.setPeerVolume(peer.socketId, peer.userId, val / 100);
-            volLabel.textContent = val + '%';
-            if (val === 0) {
-              btnMute.classList.add('active-muted');
-              btnMute.innerHTML = window.ICONS.speakerMuted + ' Unmute';
-            } else {
-              btnMute.classList.remove('active-muted');
-              btnMute.innerHTML = window.ICONS.speaker + ' Mute';
-            }
-          };
         }
       } else {
         if (isPeerCameraOn) {
