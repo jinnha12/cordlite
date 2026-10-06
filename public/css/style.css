@@ -830,13 +830,13 @@ body {
 /* Voice Grid - Dynamic Auto-fit for voice chats */
 .voice-grid {
   flex: 1 1 0%;
-  padding: 20px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  grid-auto-rows: minmax(170px, 1fr);
-  gap: 16px;
-  align-content: center;
+  padding: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  align-content: center;
+  gap: 16px;
   overflow-y: auto;
   min-height: 0;
   min-width: 0;
@@ -868,10 +868,12 @@ body {
 }
 
 .voice-grid.filmstrip .voice-tile {
-  width: 136px;
-  min-width: 136px;
-  height: 78px;
-  min-height: 78px;
+  width: 136px !important;
+  min-width: 136px !important;
+  max-width: 136px !important;
+  height: 78px !important;
+  min-height: 78px !important;
+  max-height: 78px !important;
   aspect-ratio: auto;
   flex-shrink: 0;
   border-radius: var(--radius-md);
@@ -907,15 +909,24 @@ body {
   background-color: var(--bg-secondary);
   border-radius: var(--radius-lg);
   aspect-ratio: 16/10;
-  min-height: 180px;
+  width: 320px;
+  max-width: calc(100% - 24px);
+  height: 200px;
+  max-height: 230px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
   box-shadow: var(--shadow-elevation-high);
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease;
   border: 3px solid transparent;
+  flex-shrink: 0;
+}
+
+.voice-tile[data-media-mode="camera"] {
+  width: 360px;
+  height: 225px;
 }
 
 .voice-tile.speaking {
