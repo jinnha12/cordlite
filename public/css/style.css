@@ -791,7 +791,7 @@ body {
 }
 
 .btn-send:hover {
-  transform: scale(1.1);
+  color: var(--text-header);
 }
 
 /* 4. Voice Stage Screen (When viewing/joined a voice channel) */
@@ -877,7 +877,7 @@ body {
   aspect-ratio: auto;
   flex-shrink: 0;
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
   border: 2px solid transparent;
   padding: 6px;
   cursor: pointer;
@@ -907,7 +907,7 @@ body {
 
 .voice-tile {
   background-color: var(--bg-secondary);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   aspect-ratio: 16/10;
   width: 320px;
   max-width: calc(100% - 24px);
@@ -918,9 +918,9 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
-  box-shadow: var(--shadow-elevation-high);
-  transition: border-color 0.15s ease, transform 0.15s ease;
-  border: 3px solid transparent;
+  box-shadow: none;
+  transition: border-color 0.15s ease;
+  border: 2px solid transparent;
   flex-shrink: 0;
 }
 
@@ -931,13 +931,6 @@ body {
 
 .voice-tile.speaking {
   border-color: var(--green-speaking);
-  animation: pulse-speaking 1.2s infinite ease-out;
-}
-
-@keyframes pulse-speaking {
-  0% { box-shadow: 0 0 0 0 rgba(35, 165, 90, 0.6); }
-  70% { box-shadow: 0 0 0 10px rgba(35, 165, 90, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(35, 165, 90, 0); }
 }
 
 .voice-tile-avatar {
@@ -950,11 +943,6 @@ body {
   font-size: 32px;
   font-weight: 700;
   color: #fff;
-  transition: transform 0.2s ease;
-}
-
-.voice-tile.speaking .voice-tile-avatar {
-  transform: scale(1.05);
 }
 
 .voice-tile-name-tag {
@@ -1376,7 +1364,7 @@ body {
 }
 
 .color-dot:hover {
-  transform: scale(1.1);
+  opacity: 0.9;
 }
 
 .color-dot.selected {
@@ -1655,7 +1643,7 @@ body {
 }
 
 .ctx-slider-input::-webkit-slider-thumb:hover {
-  transform: scale(1.25);
+  background: var(--blurple-hover);
 }
 
 /* ========================================================
@@ -1664,13 +1652,11 @@ body {
 .stage-btn.active {
   background-color: var(--green) !important;
   color: #fff !important;
-  box-shadow: 0 0 12px rgba(35, 165, 90, 0.4);
 }
 
 .stage-btn.active-screen {
   background-color: var(--blurple) !important;
   color: #fff !important;
-  box-shadow: 0 0 12px rgba(88, 101, 242, 0.4);
 }
 
 .voice-tile.screen-sharing {
@@ -1686,7 +1672,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   overflow: hidden;
   background-color: #000;
   display: flex;
@@ -1698,7 +1684,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
 }
 
 .voice-tile.screen-sharing .voice-tile-video-wrap video {
@@ -1772,12 +1758,6 @@ body {
 #btn-ptt-keybind.recording {
   background-color: var(--blurple);
   border-color: #fff;
-  animation: pulse-ptt 1s infinite alternate;
-}
-
-@keyframes pulse-ptt {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.04); }
 }
 
 .ptt-hint {
@@ -1868,12 +1848,7 @@ body {
 .soundboard-card:hover {
   background-color: var(--bg-secondary-alt);
   border-color: var(--blurple);
-  transform: translateY(-2px);
   color: #fff;
-}
-
-.soundboard-card:active {
-  transform: scale(0.96);
 }
 
 .soundboard-card-icon {
@@ -1980,8 +1955,7 @@ body {
 
 .reaction-picker-btn:hover {
   background-color: rgba(255, 255, 255, 0.12);
-  color: var(--blurple);
-  transform: scale(1.15);
+  color: #fff;
 }
 
 .message-reactions-row {
@@ -2039,9 +2013,9 @@ body {
   flex-direction: column;
   background-color: #0b0e14;
   position: relative;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: none;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -2051,7 +2025,7 @@ body {
   left: 0;
   right: 0;
   height: 48px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0) 100%);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2071,7 +2045,6 @@ body {
   font-size: 13px;
   font-weight: 700;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
 .stream-res-badge {
@@ -2096,7 +2069,6 @@ body {
   align-items: center;
   gap: 4px;
   text-transform: uppercase;
-  box-shadow: 0 2px 6px rgba(237, 66, 69, 0.4);
 }
 
 .stream-top-actions {
@@ -2117,13 +2089,12 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .btn-theater-stream:hover,
 .btn-fullscreen-stream:hover {
   background: rgba(255, 255, 255, 0.25);
-  transform: scale(1.05);
 }
 
 .stream-media-wrap {
@@ -2218,7 +2189,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at center, rgba(30, 31, 34, 0.92) 0%, rgba(18, 19, 22, 0.98) 100%);
+  background: rgba(20, 21, 24, 0.95);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2238,7 +2209,7 @@ body {
   font-size: 32px;
   font-weight: 700;
   color: #fff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -2267,14 +2238,11 @@ body {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);
+  transition: background-color var(--transition-fast);
 }
 
 .btn-watch-stream:hover {
   background-color: var(--blurple-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(88, 101, 242, 0.5);
 }
 
 .live-stream-ctx-item {
@@ -2282,7 +2250,7 @@ body {
 }
 
 .live-stream-ctx-item:hover {
-  background-color: rgba(237, 66, 69, 0.15) !important;
+  background-color: rgba(242, 63, 67, 0.15) !important;
   color: #fff !important;
 }
 
@@ -2296,17 +2264,17 @@ body {
   width: 320px;
   height: 200px;
   background-color: #0b0e14;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   z-index: 1000;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .floating-pip-player:hover {
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(88, 101, 242, 0.5);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .pip-header {
@@ -2390,12 +2358,6 @@ body {
 #btn-ptt-keybind.recording {
   background-color: var(--red);
   color: #fff;
-  animation: pttPulse 1s infinite alternate;
-}
-
-@keyframes pttPulse {
-  from { opacity: 0.8; }
-  to { opacity: 1; }
 }
 
 /* ==========================================================================
@@ -2485,7 +2447,7 @@ input:checked + .slider.round:before {
 .mic-meter-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #23a55a, #57f287);
+  background: var(--green);
   border-radius: 6px;
   transition: width 0.05s ease-out;
 }
@@ -2499,8 +2461,7 @@ input:checked + .slider.round:before {
   top: 0;
   bottom: 0;
   width: 3px;
-  background-color: #fee75c;
-  box-shadow: 0 0 6px rgba(254, 231, 92, 0.8);
+  background-color: var(--yellow);
   z-index: 2;
   pointer-events: none;
   transition: left 0.1s ease;
@@ -2859,43 +2820,40 @@ input:checked + .slider.round:before {
 .role-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
+  gap: 3px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  padding: 1px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.2px;
   vertical-align: middle;
+  line-height: 1.2;
 }
 
 .role-badge svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 .role-badge.owner {
-  background: rgba(254, 231, 92, 0.18);
-  color: #fee75c;
-  border: 1px solid rgba(254, 231, 92, 0.4);
+  background: rgba(240, 178, 50, 0.15);
+  color: var(--yellow);
 }
 
 .role-badge.admin {
-  background: rgba(237, 66, 69, 0.18);
-  color: #ed4245;
-  border: 1px solid rgba(237, 66, 69, 0.4);
+  background: rgba(242, 63, 67, 0.15);
+  color: var(--red);
 }
 
 .role-badge.vip {
-  background: rgba(235, 69, 158, 0.18);
-  color: #eb459e;
-  border: 1px solid rgba(235, 69, 158, 0.4);
+  background: rgba(88, 101, 242, 0.15);
+  color: var(--blurple);
 }
 
 .role-badge.member {
-  background: rgba(148, 155, 164, 0.15);
-  color: #949ba4;
-  border: 1px solid rgba(148, 155, 164, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
 }
 
 .user-username-sub {
@@ -2948,13 +2906,12 @@ input:checked + .slider.round:before {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #2AABEE 0%, #229ED9 100%);
+  background: #24a1de;
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(36, 161, 222, 0.4);
 }
 
 .tg-phone-input-wrap {
@@ -3027,8 +2984,8 @@ input:checked + .slider.round:before {
 }
 
 .tg-dev-code-pill {
-  background: rgba(36, 161, 222, 0.12);
-  border: 1px dashed rgba(36, 161, 222, 0.4);
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
   padding: 8px 12px;
   margin-top: 12px;

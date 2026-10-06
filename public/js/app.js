@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (parsed && parsed.userId) return parsed;
       } catch (e) {}
     }
-    const colors = ['#5865F2', '#eb459e', '#57f287', '#fee75c', '#ed4245', '#00a8fc'];
+    const colors = ['#5865F2', '#23A55A', '#F0B232', '#F23F43', '#4E5058', '#5865F2'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const defaultUser = {
@@ -272,10 +272,10 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="ctx-divider"></div>
         <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); padding: 4px 10px 2px; text-transform: uppercase;">Server Roles</div>
         <div class="ctx-item" id="ctx-role-admin">
-          <div class="ctx-item-left"><span style="color: #ed4245;">${window.ICONS.shield}</span><span>Assign Admin Role</span></div>
+          <div class="ctx-item-left"><span style="color: #f23f43;">${window.ICONS.shield}</span><span>Assign Admin Role</span></div>
         </div>
         <div class="ctx-item" id="ctx-role-vip">
-          <div class="ctx-item-left"><span style="color: #eb459e;">${window.ICONS.star}</span><span>Assign VIP Role</span></div>
+          <div class="ctx-item-left"><span style="color: #5865f2;">${window.ICONS.star}</span><span>Assign VIP Role</span></div>
         </div>
         <div class="ctx-item" id="ctx-role-member">
           <div class="ctx-item-left"><span style="color: #949ba4;">${window.ICONS.users}</span><span>Set as Member</span></div>
@@ -2833,9 +2833,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tgSettingsStatusTitle.textContent = `Connected (${user.telegramPhone || 'Verified'})`;
       if (tgSettingsStatusDesc) tgSettingsStatusDesc.textContent = 'Your account is linked with Telegram.';
       btnAct.textContent = 'Unlink';
-      btnAct.style.backgroundColor = 'rgba(237, 66, 69, 0.2)';
-      btnAct.style.color = '#ed4245';
-      btnAct.style.border = '1px solid rgba(237, 66, 69, 0.4)';
+      btnAct.style.backgroundColor = 'rgba(242, 63, 67, 0.15)';
+      btnAct.style.color = '#f23f43';
+      btnAct.style.border = 'none';
     } else {
       tgSettingsStatusTitle.textContent = 'Not Connected';
       if (tgSettingsStatusDesc) tgSettingsStatusDesc.textContent = 'Link your phone number to receive official Telegram verification.';
