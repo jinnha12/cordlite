@@ -164,12 +164,13 @@ const voiceRooms = new Map();
 io.on('connection', (socket) => {
   // Register user profile
   socket.on('user:register', (userData) => {
+    const targetServerId = userData.serverId || 'friends-hangout';
     activeUsers.set(socket.id, {
       socketId: socket.id,
       userId: userData.userId || socket.id,
       name: userData.name || 'Anonymous',
       avatarColor: userData.avatarColor || '#5865F2',
-      serverId: userData.serverId || 'friends-hangout',
+      serverId: targetServerId,
       channelId: null,
       voiceChannelId: null,
       isMuted: false,
@@ -177,8 +178,18 @@ io.on('connection', (socket) => {
       isSpeaking: false
     });
 
+    // Make socket immediately join target server room!
+    socket.join(`server:${targetServerId}`);
+
     // Send available servers list
     socket.emit('server:list', Object.values(db.servers));
+    
+    // Send details of initial server
+    const serverData = db.servers[targetServerId] || Object.values(db.servers)[0];
+    if (serverData) {
+      socket.emit('server:details', serverData);
+    }
+
     broadcastServerPresence();
   });
 
@@ -482,6 +493,8 @@ function broadcastServerPresence() {
   for (const [serverId, members] of Object.entries(serverUsersMap)) {
     io.to(`server:${serverId}`).emit('server:members', { serverId, members });
   }
+  // Global sync event
+  io.emit('server:members_all', serverUsersMap);
 }
 
 function broadcastVoiceStatus() {

@@ -194,6 +194,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  socket.on('server:members_all', (allMap) => {
+    if (currentServer && allMap[currentServer.id]) {
+      serverMembers = allMap[currentServer.id];
+      renderMembers();
+    }
+  });
+
   let voiceOccupancy = {};
   socket.on('voice:room_occupancy', (occupancy) => {
     voiceOccupancy = occupancy;
@@ -525,11 +532,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 7. Members List
   function renderMembers() {
+    const badge = document.getElementById('online-count-badge');
+    if (badge) {
+      badge.textContent = serverMembers.length;
+    }
+
     membersSidebar.innerHTML = `
       <div class="members-section-title">Online — ${serverMembers.length}</div>
     `;
 
     serverMembers.forEach(m => {
+      const isMe = m.userId === user.userId;
       const item = document.createElement('div');
       item.className = 'member-item';
       item.innerHTML = `
@@ -538,12 +551,19 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="status-dot"></div>
         </div>
         <div class="member-info">
-          <span class="member-name">${escapeHtml(m.name)}</span>
-          ${m.voiceChannelId ? '<span class="member-status">🔊 In Voice</span>' : ''}
+          <span class="member-name">${escapeHtml(m.name)}${isMe ? ' (You)' : ''}</span>
+          ${m.voiceChannelId ? '<span class="member-status" style="color: var(--green);">🔊 In Voice</span>' : '<span class="member-status">Online</span>'}
         </div>
       `;
       membersSidebar.appendChild(item);
     });
+  }
+
+  const btnToggleMembers = document.getElementById('btn-toggle-members');
+  if (btnToggleMembers) {
+    btnToggleMembers.onclick = () => {
+      membersSidebar.style.display = (membersSidebar.style.display === 'none') ? 'flex' : 'none';
+    };
   }
 
   // 8. Mute / Deafen Toggles
