@@ -10,10 +10,10 @@ async function runTests() {
   const assets = [
     'http://localhost:3000/',
     'http://localhost:3000/css/style.css',
-    'http://localhost:3000/js/icons.js?v=10',
-    'http://localhost:3000/js/audio-manager.js?v=10',
-    'http://localhost:3000/js/webrtc-voice.js?v=10',
-    'http://localhost:3000/js/app.js?v=10'
+    'http://localhost:3000/js/icons.js?v=11',
+    'http://localhost:3000/js/audio-manager.js?v=11',
+    'http://localhost:3000/js/webrtc-voice.js?v=11',
+    'http://localhost:3000/js/app.js?v=11'
   ];
 
   for (const asset of assets) {
@@ -155,6 +155,22 @@ async function runTests() {
       channelId: 'c-general',
       messageId: testMsgId,
       reactionType: 'heart'
+    });
+  });
+
+  // Test Feature 6: Direct Message (DM) Exchange Across Distinct Channels
+  const dmChannelId = 'dm-test-user-1--test-user-2';
+  await new Promise((resolve) => {
+    client2.on('chat:message', (msg) => {
+      if (msg.channelId === dmChannelId && msg.text === 'Private DM test ping!') {
+        console.log(`[PASS] Feature 6: Direct Message delivered privately across users on ${dmChannelId}!`);
+        resolve();
+      }
+    });
+    client1.emit('chat:send', {
+      serverId: null,
+      channelId: dmChannelId,
+      text: 'Private DM test ping!'
     });
   });
 

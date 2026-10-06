@@ -17,6 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let isDeafened = false;
   let isLocalSpeaking = false;
   let cachedMessages = [];
+  let isDirectMessagesView = false;
+  let activeDmUser = null;
+  let currentStreamQuality = localStorage.getItem('cordlite_stream_quality') || '720p30';
+  let isPipDismissed = false;
 
   // PTT State
   let currentInputMode = localStorage.getItem('cordlite_input_mode') || 'vad';
@@ -62,6 +66,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const membersSidebar = document.getElementById('members-sidebar');
   const toastNotification = document.getElementById('toast-notification');
+
+  // PiP Floating Mini Player Elements
+  const floatingPipPlayer = document.getElementById('floating-pip-player');
+  const pipStreamerName = document.getElementById('pip-streamer-name');
+  const pipVideo = document.getElementById('pip-video');
+  const pipCanvas = document.getElementById('pip-canvas');
+  const btnPipExpand = document.getElementById('btn-pip-expand');
+  const btnPipClose = document.getElementById('btn-pip-close');
+  const pipDragHandle = document.getElementById('pip-drag-handle');
+  const pipVideoWrap = document.getElementById('pip-video-wrap');
 
   // Modals & Popovers
   const modalCreateServer = document.getElementById('modal-create-server');
@@ -175,6 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
           <div class="ctx-divider"></div>
         ` : ''}
+        <div class="ctx-item" id="ctx-action-dm">
+          <div class="ctx-item-left"><span style="color: var(--blurple);">${window.ICONS.chat}</span><span>Direct Message</span></div>
+        </div>
         <div class="ctx-item" id="ctx-action-mention">
           <div class="ctx-item-left"><span>${window.ICONS.chat}</span><span>Mention (@${escapeHtml(targetUser.name)})</span></div>
         </div>
@@ -269,6 +286,14 @@ document.addEventListener('DOMContentLoaded', () => {
         navigator.clipboard.writeText(targetUser.userId);
         showToast('User ID copied to clipboard');
         closeContextMenu();
+      };
+    }
+
+    const dmBtn = document.getElementById('ctx-action-dm');
+    if (dmBtn) {
+      dmBtn.onclick = () => {
+        closeContextMenu();
+        openDmWithUser(targetUser);
       };
     }
 
@@ -568,8 +593,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ${window.ICONS.compass}
       </div>
     `;
+    homeBtn.classList.toggle('active', isDirectMessagesView);
     homeBtn.onclick = () => {
-      if (servers.length > 0) selectServer(servers[0].id);
+      isDirectMessagesView = true;
+      activeDmUser = null;
+      renderServerRail();
+      renderChannels();
     };
     serverRail.appendChild(homeBtn);
 
@@ -589,7 +618,11 @@ document.addEventListener('DOMContentLoaded', () => {
           ${escapeHtml(srv.icon || srv.name.substring(0, 2).toUpperCase())}
         </div>
       `;
-      srvEl.onclick = () => selectServer(srv.id);
+      srvEl.onclick = () => {
+        isDirectMessagesView = false;
+        activeDmUser = null;
+        selectServer(srv.id);
+      };
       serverRail.appendChild(srvEl);
     });
 
@@ -614,9 +647,88 @@ document.addEventListener('DOMContentLoaded', () => {
     renderServerRail();
   }
 
-  // 4. Channels Listing & Management
+  // Helper to open a 1-on-1 Direct Message conversation
+  function openDmWithUser(targetUser) {
+    if (!targetUser) return;
+    activeDmUser = targetUser;
+    isDirectMessagesView = true;
+    renderServerRail();
+
+    const dmChannelId = 'dm-' + [user.userId, targetUser.userId].sort().join('--');
+    const dmChannel = {
+      id: dmChannelId,
+      name: targetUser.name,
+      type: 'text',
+      isDm: true,
+      targetUser
+    };
+    currentChannel = dmChannel;
+
+    renderChannels();
+    topChannelHash.innerHTML = `<span style="display: flex; align-items: center; color: var(--green); margin-right: 4px;">${window.ICONS.chat}</span>`;
+    topChannelName.innerHTML = `@${escapeHtml(targetUser.name)} <span style="font-size: 11px; font-weight: 500; color: var(--green); margin-left: 6px;">● Online</span>`;
+    chatView.style.display = 'flex';
+    voiceStage.classList.remove('active');
+
+    socket.emit('chat:get_history', { channelId: dmChannelId });
+    updatePipPlayer();
+  }
+
+  // 4. Channels Listing & Management (with Direct Messages View)
   function renderChannels() {
+    if (isDirectMessagesView) {
+      serverHeaderTitle.textContent = 'Direct Messages';
+      textChannelsList.innerHTML = '';
+      voiceChannelsList.innerHTML = '';
+
+      const btnCreateText = document.getElementById('btn-open-create-text');
+      const btnCreateVoice = document.getElementById('btn-open-create-voice');
+      if (btnCreateText) btnCreateText.style.display = 'none';
+      if (btnCreateVoice) btnCreateVoice.style.display = 'none';
+
+      // Friends available for DMs
+      const onlineFriends = globalAllUsers.filter(u => u.userId !== user.userId);
+      if (onlineFriends.length === 0) {
+        textChannelsList.innerHTML = `
+          <div style="padding: 12px 8px; font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+            No other friends online yet.<br>
+            Share your invite link to talk!
+          </div>
+        `;
+      } else {
+        onlineFriends.forEach(friend => {
+          const isSelected = activeDmUser && activeDmUser.userId === friend.userId;
+          const dmEl = document.createElement('div');
+          dmEl.className = `channel-item dm-item ${isSelected ? 'active' : ''}`;
+          dmEl.innerHTML = `
+            <div class="occupant-avatar" style="width: 24px; height: 24px; font-size: 11px; background-color: ${friend.avatarUrl ? 'transparent' : friend.avatarColor};">
+              ${friend.avatarUrl ? `<img src="${friend.avatarUrl}">` : escapeHtml(friend.name.charAt(0).toUpperCase())}
+            </div>
+            <span class="channel-name" style="margin-left: 8px;">${escapeHtml(friend.name)}</span>
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-left: auto;"></span>
+          `;
+          dmEl.onclick = () => openDmWithUser(friend);
+          textChannelsList.appendChild(dmEl);
+        });
+      }
+
+      // If no DM selected yet, auto select first friend
+      if (!activeDmUser && onlineFriends.length > 0) {
+        openDmWithUser(onlineFriends[0]);
+      } else if (!activeDmUser) {
+        topChannelHash.innerHTML = window.ICONS.compass;
+        topChannelName.textContent = 'Direct Messages';
+      }
+      return;
+    }
+
+    const btnCreateText = document.getElementById('btn-open-create-text');
+    const btnCreateVoice = document.getElementById('btn-open-create-voice');
+    if (btnCreateText) btnCreateText.style.display = '';
+    if (btnCreateVoice) btnCreateVoice.style.display = '';
+
     if (!currentServer || !currentServer.channels) return;
+    serverHeaderTitle.textContent = currentServer.name;
     textChannelsList.innerHTML = '';
     voiceChannelsList.innerHTML = '';
 
@@ -672,9 +784,12 @@ document.addEventListener('DOMContentLoaded', () => {
       chatView.style.display = 'flex';
       voiceStage.classList.remove('active');
       socket.emit('chat:get_history', { channelId: ch.id });
+      updatePipPlayer();
     } else {
       chatView.style.display = 'none';
       voiceStage.classList.add('active');
+      hidePipPlayer();
+      isPipDismissed = false;
       if (!activeVoiceChannel || activeVoiceChannel.id !== ch.id) {
         joinVoiceChannel(ch);
       } else {
@@ -1715,6 +1830,156 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   });
 
+  // --- Feature 1: Floating PiP Mini Stream Player ---
+  function updatePipPlayer() {
+    if (!activeVoiceChannel || isPipDismissed) {
+      hidePipPlayer();
+      return;
+    }
+    // Only show PiP when user is browsing a text channel while in voice
+    if (!chatView || chatView.style.display !== 'flex') {
+      hidePipPlayer();
+      return;
+    }
+
+    // Find active stream
+    let streamName = null;
+    let streamObj = null;
+    let frameData = null;
+
+    if (voiceManager.isScreenSharing && voiceManager.localScreenStream) {
+      streamName = 'Your Live Screen';
+      streamObj = voiceManager.localScreenStream;
+    } else {
+      for (const [sid, peer] of voiceManager.peers.entries()) {
+        if (peer.isScreenSharing) {
+          streamName = `${peer.name}'s Stream`;
+          streamObj = peer.videoStream || voiceManager.peerVideoStreams.get(sid);
+          frameData = voiceManager.peerScreenFrames.get(sid);
+          break;
+        }
+      }
+    }
+
+    if (!streamName || (!streamObj && !frameData)) {
+      hidePipPlayer();
+      return;
+    }
+
+    if (pipStreamerName) pipStreamerName.textContent = streamName;
+    if (streamObj) {
+      if (pipVideo && pipVideo.srcObject !== streamObj) {
+        pipVideo.srcObject = streamObj;
+        pipVideo.play().catch(() => {});
+      }
+      if (pipVideo) pipVideo.style.display = 'block';
+      if (pipCanvas) pipCanvas.style.display = 'none';
+    } else if (frameData && pipCanvas) {
+      const img = new Image();
+      img.onload = () => {
+        if (pipCanvas.width !== img.width || pipCanvas.height !== img.height) {
+          pipCanvas.width = img.width;
+          pipCanvas.height = img.height;
+        }
+        const ctx = pipCanvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = frameData;
+      pipCanvas.style.display = 'block';
+      if (pipVideo) pipVideo.style.display = 'none';
+    }
+    if (floatingPipPlayer) floatingPipPlayer.style.display = 'flex';
+  }
+
+  function hidePipPlayer() {
+    if (floatingPipPlayer) {
+      floatingPipPlayer.style.display = 'none';
+      if (pipVideo) {
+        try { pipVideo.srcObject = null; } catch (e) {}
+      }
+    }
+  }
+
+  if (btnPipExpand) {
+    btnPipExpand.onclick = (e) => {
+      e.stopPropagation();
+      if (activeVoiceChannel) {
+        selectChannel(activeVoiceChannel.id);
+      }
+    };
+  }
+
+  if (pipVideoWrap) {
+    pipVideoWrap.onclick = () => {
+      if (activeVoiceChannel) {
+        selectChannel(activeVoiceChannel.id);
+      }
+    };
+  }
+
+  if (btnPipClose) {
+    btnPipClose.onclick = (e) => {
+      e.stopPropagation();
+      isPipDismissed = true;
+      hidePipPlayer();
+    };
+  }
+
+  // Draggable PiP Player
+  let isDraggingPip = false;
+  let pipStartX = 0, pipStartY = 0, pipStartLeft = 0, pipStartTop = 0;
+  if (pipDragHandle) {
+    pipDragHandle.onmousedown = (e) => {
+      if (e.target.closest('.pip-btn')) return;
+      isDraggingPip = true;
+      pipStartX = e.clientX;
+      pipStartY = e.clientY;
+      const rect = floatingPipPlayer.getBoundingClientRect();
+      pipStartLeft = rect.left;
+      pipStartTop = rect.top;
+      floatingPipPlayer.style.bottom = 'auto';
+      floatingPipPlayer.style.right = 'auto';
+      floatingPipPlayer.style.left = pipStartLeft + 'px';
+      floatingPipPlayer.style.top = pipStartTop + 'px';
+      e.preventDefault();
+    };
+  }
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDraggingPip || !floatingPipPlayer) return;
+    const dx = e.clientX - pipStartX;
+    const dy = e.clientY - pipStartY;
+    floatingPipPlayer.style.left = `${Math.max(10, Math.min(window.innerWidth - 330, pipStartLeft + dx))}px`;
+    floatingPipPlayer.style.top = `${Math.max(10, Math.min(window.innerHeight - 210, pipStartTop + dy))}px`;
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDraggingPip = false;
+  });
+
+  // Feature 3: Stream Quality Cards
+  const streamQualityCards = document.querySelectorAll('#stream-quality-cards .radio-card');
+  streamQualityCards.forEach(card => {
+    card.onclick = () => {
+      streamQualityCards.forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      currentStreamQuality = card.dataset.quality;
+    };
+  });
+
+  // Settings Modal Open Sync
+  const origBtnUserSettingsClick = btnUserSettings ? btnUserSettings.onclick : null;
+  if (btnUserSettings) {
+    btnUserSettings.onclick = () => {
+      // Sync quality card selection
+      currentStreamQuality = localStorage.getItem('cordlite_stream_quality') || '720p30';
+      streamQualityCards.forEach(c => {
+        c.classList.toggle('selected', c.dataset.quality === currentStreamQuality);
+      });
+      if (origBtnUserSettingsClick) origBtnUserSettingsClick();
+    };
+  }
+
   document.getElementById('btn-save-profile').onclick = () => {
     const newName = document.getElementById('input-profile-name').value.trim();
     if (newName) {
@@ -1722,6 +1987,7 @@ document.addEventListener('DOMContentLoaded', () => {
       voiceManager.setInputMode(currentInputMode);
       voiceManager.pttKey = currentPttKey;
       localStorage.setItem('cordlite_ptt_key', currentPttKey);
+      localStorage.setItem('cordlite_stream_quality', currentStreamQuality);
       showToast('Settings saved successfully!');
       closeModal(modalProfile);
     }

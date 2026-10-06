@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="/css/style.css?v=10" />
+  <link rel="stylesheet" href="/css/style.css?v=11" />
 </head>
 <body>
   <div id="app-container">
@@ -372,6 +372,44 @@
           </div>
         </div>
 
+        <!-- Section: Feature 3: Stream Quality & Resolution -->
+        <div class="settings-section">
+          <div class="settings-section-title">Screen Share Quality</div>
+          
+          <div class="form-group">
+            <label class="form-label">Streaming Resolution & Frame Rate</label>
+            <div class="radio-cards input-mode-cards" id="stream-quality-cards">
+              <div class="radio-card selected" id="opt-quality-720p30" data-quality="720p30">
+                <div class="radio-card-info">
+                  <span class="radio-card-title">720p HD (30 FPS)</span>
+                  <span class="radio-card-desc">Standard crisp HD — balanced bandwidth</span>
+                </div>
+              </div>
+
+              <div class="radio-card" id="opt-quality-1080p60" data-quality="1080p60">
+                <div class="radio-card-info">
+                  <span class="radio-card-title">1080p FHD (60 FPS)</span>
+                  <span class="radio-card-desc">Ultra-smooth high FPS for games & video</span>
+                </div>
+              </div>
+
+              <div class="radio-card" id="opt-quality-480p15" data-quality="480p15">
+                <div class="radio-card-info">
+                  <span class="radio-card-title">480p (15 FPS)</span>
+                  <span class="radio-card-desc">Bandwidth saver for slow connections</span>
+                </div>
+              </div>
+
+              <div class="radio-card" id="opt-quality-source" data-quality="source">
+                <div class="radio-card-info">
+                  <span class="radio-card-title">Source Native</span>
+                  <span class="radio-card-desc">Uncapped original display resolution</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn-secondary btn-close-modal">Cancel</button>
@@ -495,11 +533,33 @@
   <!-- Discord Profile Context Menu -->
   <div id="discord-context-menu" class="discord-context-menu" style="display: none;"></div>
 
+  <!-- Feature: Floating PiP Mini Stream Player -->
+  <div id="floating-pip-player" class="floating-pip-player" style="display: none;">
+    <div class="pip-header" id="pip-drag-handle">
+      <div class="pip-info">
+        <span class="occupant-live-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm9 3h-2v2H9v2h2v2h2v-2h2v-2h-2V9z"/><path d="M13 7l4 4-4 4v-3H9v-2h4V7z"/></svg> LIVE</span>
+        <span id="pip-streamer-name" class="pip-streamer-name">Live Stream</span>
+      </div>
+      <div class="pip-controls">
+        <button id="btn-pip-expand" class="pip-btn" title="Back to Voice Channel">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-14v3h3v2h-5V5h2z"/></svg>
+        </button>
+        <button id="btn-pip-close" class="pip-btn" title="Close Mini Player">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="pip-video-wrap" id="pip-video-wrap">
+      <video id="pip-video" autoplay playsinline muted></video>
+      <canvas id="pip-canvas" style="display: none;"></canvas>
+    </div>
+  </div>
+
   <!-- Socket.io & Application Scripts -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/icons.js?v=10"></script>
-  <script src="/js/audio-manager.js?v=10"></script>
-  <script src="/js/webrtc-voice.js?v=10"></script>
-  <script src="/js/app.js?v=10"></script>
+  <script src="/js/icons.js?v=11"></script>
+  <script src="/js/audio-manager.js?v=11"></script>
+  <script src="/js/webrtc-voice.js?v=11"></script>
+  <script src="/js/app.js?v=11"></script>
 </body>
 </html>

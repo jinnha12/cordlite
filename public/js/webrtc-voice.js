@@ -644,6 +644,32 @@ class WebRTCVoiceManager {
     this.notifyPeersUpdate();
   }
 
+  getDisplayMediaConstraints() {
+    const quality = localStorage.getItem('cordlite_stream_quality') || '720p30';
+    if (quality === '1080p60') {
+      return {
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60, max: 60 }, cursor: 'always' },
+        audio: true
+      };
+    } else if (quality === '480p15') {
+      return {
+        video: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 15, max: 15 }, cursor: 'always' },
+        audio: true
+      };
+    } else if (quality === 'source') {
+      return {
+        video: { cursor: 'always' },
+        audio: true
+      };
+    } else {
+      // 720p30 standard
+      return {
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 }, cursor: 'always' },
+        audio: true
+      };
+    }
+  }
+
   async toggleScreenShare() {
     if (this.isScreenSharing) {
       this.stopScreenShare();
@@ -655,11 +681,21 @@ class WebRTCVoiceManager {
         this.stopCamera();
       }
 
-      this.localScreenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' },
-        audio: false
-      });
+      const constraints = this.getDisplayMediaConstraints();
+      this.localScreenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       this.isScreenSharing = true;
+
+      // Feature: Mix System Audio into Web Audio pipeline
+      const audioTracks = this.localScreenStream.getAudioTracks();
+      if (audioTracks.length > 0 && this.processor) {
+        try {
+          const ctx = this.getAudioContext();
+          this.screenAudioSource = ctx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
+          this.screenAudioSource.connect(this.processor);
+        } catch (e) {
+          console.warn('Could not mix system audio:', e);
+        }
+      }
 
       const track = this.localScreenStream.getVideoTracks()[0];
       track.onended = () => {
@@ -749,6 +785,10 @@ class WebRTCVoiceManager {
 
   stopScreenShare() {
     this.stopScreenFrameBroadcast();
+    if (this.screenAudioSource) {
+      try { this.screenAudioSource.disconnect(); } catch (e) {}
+      this.screenAudioSource = null;
+    }
     if (this.localScreenStream) {
       this.localScreenStream.getTracks().forEach(t => t.stop());
       this.localScreenStream = null;

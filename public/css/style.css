@@ -2095,3 +2095,102 @@ body {
   color: #fff !important;
 }
 
+/* ========================================================
+   FEATURE: Floating PiP Mini Stream Player
+   ======================================================== */
+.floating-pip-player {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 320px;
+  height: 200px;
+  background-color: #0b0e14;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.floating-pip-player:hover {
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(88, 101, 242, 0.5);
+}
+
+.pip-header {
+  height: 36px;
+  background: rgba(18, 19, 22, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  user-select: none;
+}
+
+.pip-header:active {
+  cursor: grabbing;
+}
+
+.pip-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.pip-streamer-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.pip-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pip-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.pip-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.pip-video-wrap {
+  flex: 1;
+  position: relative;
+  background-color: #000;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#pip-video, #pip-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+

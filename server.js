@@ -293,8 +293,12 @@ io.on('connection', (socket) => {
     }
     saveStore();
 
-    // Broadcast message to everyone in this server
-    io.to(`server:${serverId}`).emit('chat:message', message);
+    // Broadcast message to everyone in this server (or global for DMs)
+    if (channelId.startsWith('dm-')) {
+      io.emit('chat:message', message);
+    } else {
+      io.to(`server:${serverId}`).emit('chat:message', message);
+    }
   });
 
   // Feature 5: Toggle Message Reaction
@@ -322,11 +326,19 @@ io.on('connection', (socket) => {
     }
 
     saveStore();
-    io.to(`server:${serverId}`).emit('chat:reaction_updated', {
-      channelId,
-      messageId,
-      reactions: msg.reactions
-    });
+    if (channelId.startsWith('dm-')) {
+      io.emit('chat:reaction_updated', {
+        channelId,
+        messageId,
+        reactions: msg.reactions
+      });
+    } else {
+      io.to(`server:${serverId}`).emit('chat:reaction_updated', {
+        channelId,
+        messageId,
+        reactions: msg.reactions
+      });
+    }
   });
 
   // --- WebRTC Voice Channels Signaling ---
