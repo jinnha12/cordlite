@@ -100,6 +100,7 @@
           <span class="top-bar-desc">Talk and chat freely with your friends</span>
         </div>
         <div class="top-bar-right">
+          <span id="conn-status-badge" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(35, 165, 90, 0.2); color: var(--green); font-weight: 600;">🟢 Connected</span>
           <button class="btn-member-toggle" id="btn-toggle-members" title="Toggle Member List">
             👥 <span id="online-count-badge">1</span>
           </button>
@@ -276,8 +277,8 @@
 
   <!-- Socket.io & Application Scripts -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/audio-manager.js"></script>
-  <script src="/js/webrtc-voice.js"></script>
-  <script src="/js/app.js"></script>
+  <script src="/js/audio-manager.js?v=4"></script>
+  <script src="/js/webrtc-voice.js?v=4"></script>
+  <script src="/js/app.js?v=4"></script>
 </body>
 </html>

@@ -106,6 +106,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // 2. Socket Event Listeners
   socket.on('connect', () => {
     console.log('Connected to CordLite server:', socket.id);
+    const connBadge = document.getElementById('conn-status-badge');
+    if (connBadge) {
+      connBadge.textContent = '🟢 Connected';
+      connBadge.style.color = 'var(--green)';
+      connBadge.style.background = 'rgba(35, 165, 90, 0.2)';
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const inviteServerId = urlParams.get('invite') || urlParams.get('server');
 
@@ -115,6 +122,16 @@ document.addEventListener('DOMContentLoaded', () => {
       avatarColor: user.avatarColor,
       serverId: inviteServerId || 'friends-hangout'
     });
+  });
+
+  socket.on('disconnect', () => {
+    console.warn('Disconnected from CordLite server');
+    const connBadge = document.getElementById('conn-status-badge');
+    if (connBadge) {
+      connBadge.textContent = '🔴 Disconnected';
+      connBadge.style.color = 'var(--red)';
+      connBadge.style.background = 'rgba(242, 63, 67, 0.2)';
+    }
   });
 
   socket.on('server:list', (serverList) => {
@@ -416,12 +433,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 6. Chat Messaging Logic
   function renderChatMessages(messages) {
+    const srvName = currentServer ? currentServer.name : 'Hangout';
+    const srvId = currentServer ? currentServer.id : 'friends-hangout';
     messagesFeed.innerHTML = `
       <div class="chat-welcome-banner">
         <div class="chat-welcome-title">Welcome to #${escapeHtml(currentChannel ? currentChannel.name : 'channel')}!</div>
-        <div class="chat-welcome-desc">This is the start of the #${escapeHtml(currentChannel ? currentChannel.name : 'channel')} channel. Say hi to your friends!</div>
+        <div class="chat-welcome-desc">
+          Server: <strong>${escapeHtml(srvName)}</strong> (ID: <code>${escapeHtml(srvId)}</code>) • 
+          <a href="#" id="link-welcome-invite" style="color: var(--blurple); text-decoration: underline; font-weight: 600;">🔗 Copy Friend Invite Link</a>
+        </div>
       </div>
     `;
+    const linkInvite = document.getElementById('link-welcome-invite');
+    if (linkInvite) {
+      linkInvite.onclick = (e) => {
+        e.preventDefault();
+        const inviteUrl = `${window.location.origin}/?invite=${srvId}`;
+        navigator.clipboard.writeText(inviteUrl);
+        showToast('Invite link copied to clipboard!');
+      };
+    }
     messages.forEach(msg => appendChatMessage(msg));
     scrollToBottom();
   }
