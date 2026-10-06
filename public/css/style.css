@@ -239,8 +239,20 @@ body {
 }
 
 .channel-icon {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
+}
+
+.channel-icon svg,
+.add-channel-icon svg,
+.action-btn svg,
+.stage-btn svg,
+.btn-member-mute svg,
+.btn-peer-mute svg,
+.voice-disconnect-btn svg {
+  display: block;
 }
 
 .channel-item.active .channel-icon {

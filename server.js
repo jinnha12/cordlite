@@ -45,7 +45,7 @@ const defaultState = {
     'friends-hangout': {
       id: 'friends-hangout',
       name: 'Friends Hangout',
-      icon: '🎮',
+      icon: 'FH',
       created: Date.now(),
       channels: [
         { id: 'c-general', name: 'general', type: 'text' },
@@ -196,10 +196,11 @@ io.on('connection', (socket) => {
   // Server creation
   socket.on('server:create', ({ name, icon }) => {
     const serverId = 'srv-' + Math.random().toString(36).substring(2, 9);
+    const srvInitials = (name || 'NH').split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
     const newServer = {
       id: serverId,
       name: name || 'New Hangout',
-      icon: icon || '💬',
+      icon: icon || srvInitials,
       created: Date.now(),
       channels: [
         { id: `c-${serverId}-gen`, name: 'general', type: 'text' },

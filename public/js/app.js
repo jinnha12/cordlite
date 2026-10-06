@@ -119,31 +119,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isMe) {
       itemsHtml = `
         <div class="ctx-item" id="ctx-action-edit-profile">
-          <div class="ctx-item-left"><span>✏️</span><span>Edit Profile</span></div>
+          <div class="ctx-item-left"><span>${window.ICONS.edit}</span><span>Edit Profile</span></div>
         </div>
         <div class="ctx-item" id="ctx-action-toggle-mute">
-          <div class="ctx-item-left"><span>${isMuted ? '🎙️' : '🔇'}</span><span>${isMuted ? 'Unmute Microphone' : 'Mute Microphone'}</span></div>
+          <div class="ctx-item-left"><span>${isMuted ? window.ICONS.micMuted : window.ICONS.mic}</span><span>${isMuted ? 'Unmute Microphone' : 'Mute Microphone'}</span></div>
         </div>
         <div class="ctx-item" id="ctx-action-toggle-deafen">
-          <div class="ctx-item-left"><span>${isDeafened ? '🎧' : '🔕'}</span><span>${isDeafened ? 'Undeafen Audio' : 'Deafen Audio'}</span></div>
+          <div class="ctx-item-left"><span>${isDeafened ? window.ICONS.deafen : window.ICONS.headphones}</span><span>${isDeafened ? 'Undeafen Audio' : 'Deafen Audio'}</span></div>
         </div>
         <div class="ctx-divider"></div>
         <div class="ctx-item" id="ctx-action-copy-id">
-          <div class="ctx-item-left"><span>📋</span><span>Copy User ID</span></div>
+          <div class="ctx-item-left"><span>${window.ICONS.copy}</span><span>Copy User ID</span></div>
         </div>
       `;
     } else {
       itemsHtml = `
         <div class="ctx-item" id="ctx-action-mention">
-          <div class="ctx-item-left"><span>💬</span><span>Mention (@${escapeHtml(targetUser.name)})</span></div>
+          <div class="ctx-item-left"><span>${window.ICONS.chat}</span><span>Mention (@${escapeHtml(targetUser.name)})</span></div>
         </div>
         <div class="ctx-item" id="ctx-action-mute-peer">
           <div class="ctx-item-left">
-            <span>${isLocallyMuted ? '🔇' : '🔊'}</span>
+            <span>${isLocallyMuted ? window.ICONS.speakerMuted : window.ICONS.speaker}</span>
             <span>Mute User</span>
           </div>
           <div class="ctx-checkbox ${isLocallyMuted ? 'checked' : ''}">
-            ${isLocallyMuted ? '✓' : ''}
+            ${isLocallyMuted ? window.ICONS.check : ''}
           </div>
         </div>
 
@@ -157,10 +157,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="ctx-divider"></div>
         <div class="ctx-item" id="ctx-action-copy-name">
-          <div class="ctx-item-left"><span>📋</span><span>Copy Nickname</span></div>
+          <div class="ctx-item-left"><span>${window.ICONS.copy}</span><span>Copy Nickname</span></div>
         </div>
         <div class="ctx-item" id="ctx-action-copy-id">
-          <div class="ctx-item-left"><span>📋</span><span>Copy User ID</span></div>
+          <div class="ctx-item-left"><span>${window.ICONS.copy}</span><span>Copy User ID</span></div>
         </div>
       `;
     }
@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Connected to CordLite server:', socket.id);
     const connBadge = document.getElementById('conn-status-badge');
     if (connBadge) {
-      connBadge.textContent = '🟢 Connected';
+      connBadge.innerHTML = '<span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--green);"></span> Connected';
       connBadge.style.color = 'var(--green)';
       connBadge.style.background = 'rgba(35, 165, 90, 0.2)';
     }
@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Disconnected from CordLite server');
     const connBadge = document.getElementById('conn-status-badge');
     if (connBadge) {
-      connBadge.textContent = '🔴 Disconnected';
+      connBadge.innerHTML = '<span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--red);"></span> Disconnected';
       connBadge.style.color = 'var(--red)';
       connBadge.style.background = 'rgba(242, 63, 67, 0.2)';
     }
@@ -460,6 +460,20 @@ document.addEventListener('DOMContentLoaded', () => {
     divider.className = 'server-divider';
     serverRail.appendChild(divider);
 
+    // Helper for server icon (SVG or initials)
+    function getServerIconHtml(srv) {
+      if (srv.icon && srv.icon.includes('<svg')) return srv.icon;
+      if (!srv.icon || srv.icon === '🎮' || srv.icon === '💬') {
+        return window.ICONS.serverDefault;
+      }
+      if (/^[A-Za-z0-9]{1,3}$/.test(srv.icon)) {
+        return `<span style="font-weight: 700; font-size: 14px;">${escapeHtml(srv.icon)}</span>`;
+      }
+      const words = (srv.name || 'Server').split(/\s+/).filter(Boolean);
+      const initials = words.length > 1 ? (words[0][0] + words[1][0]).toUpperCase() : (srv.name || 'S').substring(0, 2).toUpperCase();
+      return `<span style="font-weight: 700; font-size: 14px;">${escapeHtml(initials)}</span>`;
+    }
+
     // List of servers
     servers.forEach((srv) => {
       const occupants = globalUsersMap[srv.id] ? globalUsersMap[srv.id].length : 0;
@@ -468,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
       item.title = `${srv.name} (${occupants} online)`;
       item.innerHTML = `
         <div class="server-pill"></div>
-        <span>${srv.icon || srv.name.charAt(0).toUpperCase()}</span>
+        ${getServerIconHtml(srv)}
         ${occupants > 0 ? `<div class="server-occupant-badge" style="position: absolute; bottom: -2px; right: -2px; background: var(--green); color: #fff; font-size: 10px; font-weight: 800; border-radius: 10px; padding: 1px 5px; border: 2px solid var(--bg-tertiary);">${occupants}</div>` : ''}
       `;
       item.onclick = () => selectServer(srv.id);
@@ -481,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
     addBtn.title = 'Add a Server';
     addBtn.innerHTML = `
       <div class="server-pill"></div>
-      <span style="font-size: 24px;">+</span>
+      ${window.ICONS.plus}
     `;
     addBtn.onclick = () => openModal(modalCreateServer);
     serverRail.appendChild(addBtn);
@@ -506,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const el = document.createElement('div');
       el.className = `channel-item ${currentChannel && currentChannel.id === c.id ? 'active' : ''}`;
       el.innerHTML = `
-        <span class="channel-icon">#</span>
+        <span class="channel-icon">${window.ICONS.hash}</span>
         <span class="channel-name">${escapeHtml(c.name)}</span>
       `;
       el.onclick = () => selectChannel(c.id);
@@ -519,9 +533,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const el = document.createElement('div');
       const isCurrentActive = activeVoiceChannel && activeVoiceChannel.id === c.id;
-      el.className = `channel-item ${isCurrentActive ? 'active' : ''}`;
+      el.className = `channel-item voice-channel ${isCurrentActive ? 'active' : ''}`;
       el.innerHTML = `
-        <span class="channel-icon">🔊</span>
+        <span class="channel-icon">${window.ICONS.speaker}</span>
         <span class="channel-name">${escapeHtml(c.name)}</span>
       `;
       el.onclick = () => joinVoiceChannel(c);
@@ -626,8 +640,8 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
       <div class="voice-tile-name-tag">
         <span>${escapeHtml(user.name)} (You)</span>
-        ${isMuted ? '<span class="tile-icon-muted">🔇</span>' : ''}
-        ${isDeafened ? '<span class="tile-icon-muted">🎧</span>' : ''}
+        ${isMuted ? `<span class="tile-icon-muted">${window.ICONS.micMuted}</span>` : ''}
+        ${isDeafened ? `<span class="tile-icon-muted">${window.ICONS.deafen}</span>` : ''}
       </div>
     `;
     myTile.oncontextmenu = (e) => showUserContextMenu(e, user);
@@ -642,13 +656,13 @@ document.addEventListener('DOMContentLoaded', () => {
       tile.innerHTML = `
         <div class="voice-tile-avatar" style="background-color: ${peer.avatarColor}">
           ${peer.name.charAt(0).toUpperCase()}
-          ${isLocallyMuted ? '<span class="avatar-mute-badge" title="Muted for you">🔇</span>' : ''}
+          ${isLocallyMuted ? `<span class="avatar-mute-badge" title="Muted for you">${window.ICONS.speakerMuted}</span>` : ''}
         </div>
 
         <!-- Quick Mute & Volume Control -->
         <div class="voice-tile-actions">
           <button class="btn-peer-mute ${isLocallyMuted ? 'active-muted' : ''}" title="${isLocallyMuted ? 'Unmute this user' : 'Mute this user for you'}">
-            ${isLocallyMuted ? '🔇 Unmute' : '🔊 Mute'}
+            ${isLocallyMuted ? window.ICONS.speakerMuted + ' Unmute' : window.ICONS.speaker + ' Mute'}
           </button>
           <div class="peer-vol-wrap">
             <span class="vol-label">${isLocallyMuted ? '0%' : peerVol + '%'}</span>
@@ -658,9 +672,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="voice-tile-name-tag">
           <span>${escapeHtml(peer.name)}</span>
-          ${isLocallyMuted ? '<span class="tile-icon-local-muted" title="You muted this user">🔇 Muted</span>' : ''}
-          ${peer.isMuted ? '<span class="tile-icon-muted" title="Mic muted">🔇</span>' : ''}
-          ${peer.isDeafened ? '<span class="tile-icon-muted" title="Deafened">🎧</span>' : ''}
+          ${isLocallyMuted ? `<span class="tile-icon-local-muted" title="You muted this user">${window.ICONS.speakerMuted} Muted</span>` : ''}
+          ${peer.isMuted ? `<span class="tile-icon-muted" title="Mic muted">${window.ICONS.micMuted}</span>` : ''}
+          ${peer.isDeafened ? `<span class="tile-icon-muted" title="Deafened">${window.ICONS.deafen}</span>` : ''}
         </div>
       `;
 
@@ -683,10 +697,10 @@ document.addEventListener('DOMContentLoaded', () => {
         volLabel.textContent = val + '%';
         if (val === 0) {
           btnMute.classList.add('active-muted');
-          btnMute.textContent = '🔇 Unmute';
+          btnMute.innerHTML = window.ICONS.speakerMuted + ' Unmute';
         } else {
           btnMute.classList.remove('active-muted');
-          btnMute.textContent = '🔊 Mute';
+          btnMute.innerHTML = window.ICONS.speaker + ' Mute';
         }
       };
 
@@ -704,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="chat-welcome-title">Welcome to #${escapeHtml(currentChannel ? currentChannel.name : 'channel')}!</div>
         <div class="chat-welcome-desc">
           Server: <strong>${escapeHtml(srvName)}</strong> (ID: <code>${escapeHtml(srvId)}</code>) • 
-          <a href="#" id="link-welcome-invite" style="color: var(--blurple); text-decoration: underline; font-weight: 600;">🔗 Copy Friend Invite Link</a>
+          <a href="#" id="link-welcome-invite" style="color: var(--blurple); text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">${window.ICONS.link} Copy Friend Invite Link</a>
         </div>
       </div>
     `;
@@ -741,7 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
         attachmentHtml = `
           <div class="message-attachment">
             <a href="${msg.attachment.url}" target="_blank" class="file-box">
-              <span>📁</span>
+              <span>${window.ICONS.file}</span>
               <div>
                 <div style="font-weight: 600;">${escapeHtml(msg.attachment.filename)}</div>
                 <div style="font-size: 11px; color: var(--text-muted);">${formatFileSize(msg.attachment.size)}</div>
@@ -864,11 +878,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="member-info">
           <span class="member-name">${escapeHtml(m.name)}${isMe ? ' (You)' : ''}</span>
-          ${m.voiceChannelId ? '<span class="member-status" style="color: var(--green);">🔊 In Voice</span>' : '<span class="member-status">Online</span>'}
+          ${m.voiceChannelId ? `<span class="member-status" style="color: var(--green); display: flex; align-items: center; gap: 4px;">${window.ICONS.speaker} In Voice</span>` : '<span class="member-status">Online</span>'}
         </div>
         ${isInSameVoice ? `
           <button class="btn-member-mute ${isLocallyMuted ? 'active-muted' : ''}" title="${isLocallyMuted ? 'Unmute user' : 'Mute user for you'}">
-            ${isLocallyMuted ? '🔇' : '🔊'}
+            ${isLocallyMuted ? window.ICONS.speakerMuted : window.ICONS.speaker}
           </button>
         ` : ''}
       `;
@@ -935,18 +949,18 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateMuteButtons(muted) {
     isMuted = muted;
     btnToggleMute.classList.toggle('active-danger', isMuted);
-    btnToggleMute.innerHTML = isMuted ? '🔇' : '🎙️';
+    btnToggleMute.innerHTML = isMuted ? window.ICONS.micMuted : window.ICONS.mic;
     btnStageMute.classList.toggle('active-muted', isMuted);
-    btnStageMute.innerHTML = isMuted ? '🔇' : '🎙️';
+    btnStageMute.innerHTML = isMuted ? window.ICONS.micMuted : window.ICONS.mic;
     renderVoiceStage();
   }
 
   function updateDeafenButtons(deafened) {
     isDeafened = deafened;
     btnToggleDeafen.classList.toggle('active-danger', isDeafened);
-    btnToggleDeafen.innerHTML = isDeafened ? '🔕' : '🎧';
+    btnToggleDeafen.innerHTML = isDeafened ? window.ICONS.deafen : window.ICONS.headphones;
     btnStageDeafen.classList.toggle('active-muted', isDeafened);
-    btnStageDeafen.innerHTML = isDeafened ? '🔕' : '🎧';
+    btnStageDeafen.innerHTML = isDeafened ? window.ICONS.deafen : window.ICONS.headphones;
     renderVoiceStage();
   }
 

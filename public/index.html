@@ -37,7 +37,9 @@
         <div class="channel-category">
           <div class="category-header">
             <span>Text Channels</span>
-            <span class="add-channel-icon" id="btn-open-create-text" title="Create Text Channel">+</span>
+            <span class="add-channel-icon" id="btn-open-create-text" title="Create Text Channel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </span>
           </div>
           <div id="text-channels-list"></div>
         </div>
@@ -46,7 +48,9 @@
         <div class="channel-category">
           <div class="category-header">
             <span>Voice Channels</span>
-            <span class="add-channel-icon" id="btn-open-create-voice" title="Create Voice Channel">+</span>
+            <span class="add-channel-icon" id="btn-open-create-voice" title="Create Voice Channel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </span>
           </div>
           <div id="voice-channels-list"></div>
         </div>
@@ -65,7 +69,7 @@
             <span class="status-channel-name" id="voice-dock-channel-name">Voice Lounge</span>
           </div>
           <button class="voice-disconnect-btn" id="btn-voice-disconnect" title="Disconnect from Voice">
-            📞
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C3.28 8.82 7.42 7.15 12 7.15c4.58 0 8.72 1.67 11.71 4.52.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
           </button>
         </div>
       </div>
@@ -83,9 +87,15 @@
         </div>
 
         <div class="user-actions">
-          <button class="action-btn" id="btn-toggle-mute" title="Mute Microphone">🎙️</button>
-          <button class="action-btn" id="btn-toggle-deafen" title="Deafen Audio">🎧</button>
-          <button class="action-btn" id="btn-user-settings" title="User Settings">⚙️</button>
+          <button class="action-btn" id="btn-toggle-mute" title="Mute Microphone">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+          </button>
+          <button class="action-btn" id="btn-toggle-deafen" title="Deafen Audio">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+          </button>
+          <button class="action-btn" id="btn-user-settings" title="User Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          </button>
         </div>
       </footer>
     </aside>
@@ -95,14 +105,19 @@
       <!-- Channel Top Bar -->
       <header class="channel-top-bar">
         <div class="top-bar-left">
-          <span class="top-bar-hash" id="top-channel-hash">#</span>
+          <span class="top-bar-hash" id="top-channel-hash">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5.88 20.46l.84-4.46H3.36l.38-2h3.36l.92-4.92H4.66l.38-2h3.36l.84-4.46h2l-.84 4.46h4.92l.84-4.46h2l-.84 4.46h3.36l-.38 2h-3.36l-.92 4.92h3.36l-.38 2h-3.36l-.84 4.46h-2l.84-4.46h-4.92l-.84 4.46h-2zm3.22-6.46h4.92l.92-4.92H10.02l-.92 4.92z"/></svg>
+          </span>
           <h1 class="top-bar-title" id="top-channel-name">general</h1>
           <span class="top-bar-desc">Talk and chat freely with your friends</span>
         </div>
         <div class="top-bar-right">
-          <span id="conn-status-badge" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(35, 165, 90, 0.2); color: var(--green); font-weight: 600;">🟢 Connected</span>
+          <span id="conn-status-badge" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(35, 165, 90, 0.2); color: var(--green); font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--green);"></span> Connected
+          </span>
           <button class="btn-member-toggle" id="btn-toggle-members" title="Toggle Member List">
-            👥 <span id="online-count-badge">1</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+            <span id="online-count-badge">1</span>
           </button>
           <button class="btn-invite-pill" id="btn-invite" title="Invite Friends">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -124,7 +139,9 @@
           <div class="chat-input-area">
             <div class="chat-input-container">
               <input type="file" id="file-upload-input" style="display: none;" />
-              <button class="btn-attach" id="btn-attach" title="Attach file or photo">+</button>
+              <button class="btn-attach" id="btn-attach" title="Attach file or photo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              </button>
               <input type="text" id="chat-text-input" placeholder="Message #general..." autocomplete="off" />
               <button class="btn-send" id="btn-send-message" title="Send Message">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -142,9 +159,15 @@
           </div>
 
           <div class="voice-stage-controls">
-            <button class="stage-btn" id="btn-stage-mute" title="Toggle Mic">🎙️</button>
-            <button class="stage-btn" id="btn-stage-deafen" title="Toggle Deafen">🎧</button>
-            <button class="stage-btn danger" id="btn-stage-disconnect" title="Disconnect">📞</button>
+            <button class="stage-btn" id="btn-stage-mute" title="Toggle Mic">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+            </button>
+            <button class="stage-btn" id="btn-stage-deafen" title="Toggle Deafen">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+            </button>
+            <button class="stage-btn danger" id="btn-stage-disconnect" title="Disconnect">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C3.28 8.82 7.42 7.15 12 7.15c4.58 0 8.72 1.67 11.71 4.52.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+            </button>
           </div>
         </section>
       </div>
@@ -173,8 +196,8 @@
           <input class="form-input" id="input-server-name" placeholder="e.g. Gaming Squad" />
         </div>
         <div class="form-group">
-          <label class="form-label" for="input-server-icon">Server Icon (Emoji)</label>
-          <input class="form-input" id="input-server-icon" placeholder="🎮, 🚀, ☕, 🎧" maxlength="4" />
+          <label class="form-label" for="input-server-icon">Server Initials / Tag</label>
+          <input class="form-input" id="input-server-icon" placeholder="e.g. GS, HQ, GM" maxlength="4" />
         </div>
       </div>
       <div class="modal-footer">
@@ -196,14 +219,18 @@
           <label class="form-label">Channel Type</label>
           <div class="radio-cards">
             <div class="radio-card selected" data-type="text">
-              <span class="radio-card-icon">#</span>
+              <span class="radio-card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5.88 20.46l.84-4.46H3.36l.38-2h3.36l.92-4.92H4.66l.38-2h3.36l.84-4.46h2l-.84 4.46h4.92l.84-4.46h2l-.84 4.46h3.36l-.38 2h-3.36l-.92 4.92h3.36l-.38 2h-3.36l-.84 4.46h-2l.84-4.46h-4.92l-.84 4.46h-2zm3.22-6.46h4.92l.92-4.92H10.02l-.92 4.92z"/></svg>
+              </span>
               <div class="radio-card-info">
                 <span class="radio-card-title">Text</span>
                 <span class="radio-card-desc">Post messages, images, memes, and links</span>
               </div>
             </div>
             <div class="radio-card" data-type="voice">
-              <span class="radio-card-icon">🔊</span>
+              <span class="radio-card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+              </span>
               <div class="radio-card-info">
                 <span class="radio-card-title">Voice</span>
                 <span class="radio-card-desc">Hang out together with voice and live audio</span>
@@ -280,8 +307,9 @@
 
   <!-- Socket.io & Application Scripts -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/audio-manager.js?v=5"></script>
-  <script src="/js/webrtc-voice.js?v=5"></script>
-  <script src="/js/app.js?v=5"></script>
+  <script src="/js/icons.js?v=6"></script>
+  <script src="/js/audio-manager.js?v=6"></script>
+  <script src="/js/webrtc-voice.js?v=6"></script>
+  <script src="/js/app.js?v=6"></script>
 </body>
 </html>
