@@ -10,10 +10,10 @@ async function runTests() {
   const assets = [
     'http://localhost:3000/',
     'http://localhost:3000/css/style.css',
-    'http://localhost:3000/js/icons.js?v=13',
-    'http://localhost:3000/js/audio-manager.js?v=13',
-    'http://localhost:3000/js/webrtc-voice.js?v=13',
-    'http://localhost:3000/js/app.js?v=13'
+    'http://localhost:3000/js/icons.js?v=14',
+    'http://localhost:3000/js/audio-manager.js?v=14',
+    'http://localhost:3000/js/webrtc-voice.js?v=14',
+    'http://localhost:3000/js/app.js?v=14'
   ];
 
   for (const asset of assets) {
@@ -64,6 +64,36 @@ async function runTests() {
   });
 
   await new Promise(r => setTimeout(r, 200));
+
+  // Test Feature 5: Server Nicknames & Roles
+  await new Promise((resolve) => {
+    client2.once('server:members', ({ serverId, members }) => {
+      const alice = members.find(m => m.userId === 'test-user-1');
+      if (alice && alice.nickname === 'Alice The Great') {
+        console.log(`[PASS] Feature 5: Server nickname update verified: "${alice.nickname}"!`);
+        resolve();
+      }
+    });
+    client1.emit('server:update_nickname', {
+      serverId: 'friends-hangout',
+      nickname: 'Alice The Great'
+    });
+  });
+
+  await new Promise((resolve) => {
+    client1.once('server:members', ({ serverId, members }) => {
+      const bob = members.find(m => m.userId === 'test-user-2');
+      if (bob && bob.role === 'admin') {
+        console.log(`[PASS] Feature 5: Server role assignment verified: Bob is now "${bob.role.toUpperCase()}"!`);
+        resolve();
+      }
+    });
+    client1.emit('server:update_role', {
+      serverId: 'friends-hangout',
+      targetUserId: 'test-user-2',
+      role: 'admin'
+    });
+  });
 
   // Test Join Voice Channel
   client1.emit('voice:join', { serverId: 'friends-hangout', channelId: 'v-general' });
@@ -127,11 +157,14 @@ async function runTests() {
     });
   });
 
-  // Test Feature 5: Message Sending & Reaction Toggle
+  // Test Feature 5: Message Sending & Reaction Toggle with Nickname and Role Author fields
   let testMsgId = null;
   await new Promise((resolve) => {
     client2.on('chat:message', (msg) => {
       testMsgId = msg.id;
+      if (msg.user.nickname === 'Alice The Great') {
+        console.log(`[PASS] Feature 5: Chat message contains author nickname: "${msg.user.nickname}"`);
+      }
       console.log(`[PASS] Chat message sent and received: "${msg.text}" (ID: ${msg.id})`);
       resolve();
     });
@@ -178,7 +211,7 @@ async function runTests() {
   client2.disconnect();
 
   if (failures === 0) {
-    console.log('\n*** ALL LIVE STREAMING & SOCIAL FEATURES VERIFIED SUCCESSFULLY! ***\n');
+    console.log('\n*** ALL 5 HIGH-IMPACT DISCORD FEATURES VERIFIED 100% SUCCESSFULLY! ***\n');
     process.exit(0);
   } else {
     console.error(`\nTest suite finished with ${failures} failures.\n`);

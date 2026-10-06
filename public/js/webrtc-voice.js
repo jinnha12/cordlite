@@ -23,6 +23,11 @@ class WebRTCVoiceManager {
     this.pttKey = localStorage.getItem('cordlite_ptt_key') || 'Space';
     this.isPttActive = false;
 
+    // Feature 3: Voice Input Sensitivity Gate & Mic Level
+    this.autoSensitivity = localStorage.getItem('cordlite_auto_sens') !== 'false';
+    this.sensitivityThreshold = parseFloat(localStorage.getItem('cordlite_sens_threshold') || '0.02');
+    this.onMicLevelUpdate = null;
+
     // Feature 1: Video & Screen Sharing
     this.isCameraOn = false;
     this.isScreenSharing = false;
@@ -416,19 +421,26 @@ class WebRTCVoiceManager {
         if (this.isMuted || !this.currentChannelId) return;
 
         const input = e.inputBuffer.getChannelData(0);
+        let sum = 0;
+        for (let i = 0; i < input.length; i++) {
+          sum += input[i] * input[i];
+        }
+        const rms = Math.sqrt(sum / input.length);
+        const micLevel = Math.min(1, rms * 5.5);
+        const isAboveGate = this.autoSensitivity ? (rms > 0.018) : (rms > this.sensitivityThreshold);
+
+        if (this.onMicLevelUpdate) {
+          this.onMicLevelUpdate(micLevel, isAboveGate);
+        }
+
         let shouldTransmit = false;
 
         if (this.inputMode === 'ptt') {
           // Feature 2: Push-to-Talk Mode
           shouldTransmit = this.isPttActive;
         } else {
-          // Voice Activity Detection (RMS amplitude)
-          let sum = 0;
-          for (let i = 0; i < input.length; i++) {
-            sum += input[i] * input[i];
-          }
-          const rms = Math.sqrt(sum / input.length);
-          const isSpeaking = rms > 0.018;
+          // Voice Activity Detection with Sensitivity Gate
+          const isSpeaking = isAboveGate;
 
           if (isSpeaking !== this.lastSpeakingState) {
             this.lastSpeakingState = isSpeaking;
@@ -470,6 +482,71 @@ class WebRTCVoiceManager {
       muteGain.connect(ctx.destination);
     } catch (err) {
       console.error('Error starting mic stream:', err);
+    }
+  }
+
+  // Feature 3: Set Voice Sensitivity Gate
+  setSensitivity(autoDetermined, threshold) {
+    this.autoSensitivity = !!autoDetermined;
+    if (threshold !== undefined) {
+      this.sensitivityThreshold = threshold;
+      localStorage.setItem('cordlite_sens_threshold', threshold.toString());
+    }
+    localStorage.setItem('cordlite_auto_sens', this.autoSensitivity ? 'true' : 'false');
+  }
+
+  // Feature 3: Microphone Test / Calibration
+  async startMicTest(callback) {
+    this.isTestingMic = true;
+    this.onMicTestUpdate = callback;
+    if (this.localStream && this.processor) {
+      return true;
+    }
+    try {
+      this.testStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const ctx = this.getAudioContext();
+      this.testSource = ctx.createMediaStreamSource(this.testStream);
+      this.testProcessor = ctx.createScriptProcessor(2048, 1, 1);
+      this.testProcessor.onaudioprocess = (e) => {
+        if (!this.isTestingMic) return;
+        const input = e.inputBuffer.getChannelData(0);
+        let sum = 0;
+        for (let i = 0; i < input.length; i++) {
+          sum += input[i] * input[i];
+        }
+        const rms = Math.sqrt(sum / input.length);
+        const micLevel = Math.min(1, rms * 5.5);
+        const isAboveGate = this.autoSensitivity ? (rms > 0.018) : (rms > this.sensitivityThreshold);
+        if (this.onMicTestUpdate) {
+          this.onMicTestUpdate(micLevel, isAboveGate);
+        }
+      };
+      const muteGain = ctx.createGain();
+      muteGain.gain.value = 0;
+      this.testSource.connect(this.testProcessor);
+      this.testProcessor.connect(muteGain);
+      muteGain.connect(ctx.destination);
+      return true;
+    } catch (err) {
+      console.warn('Microphone test access error:', err);
+      return false;
+    }
+  }
+
+  stopMicTest() {
+    this.isTestingMic = false;
+    this.onMicTestUpdate = null;
+    if (this.testProcessor) {
+      try { this.testProcessor.disconnect(); } catch (e) {}
+      this.testProcessor = null;
+    }
+    if (this.testSource) {
+      try { this.testSource.disconnect(); } catch (e) {}
+      this.testSource = null;
+    }
+    if (this.testStream) {
+      try { this.testStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+      this.testStream = null;
     }
   }
 

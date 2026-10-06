@@ -2328,4 +2328,526 @@ body {
   object-fit: contain;
 }
 
+/* ==========================================================================
+   Feature 1: Push-to-Talk (PTT) Keybind Recording Style
+   ========================================================================== */
+#btn-ptt-keybind.recording {
+  background-color: var(--red);
+  color: #fff;
+  animation: pttPulse 1s infinite alternate;
+}
+
+@keyframes pttPulse {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
+}
+
+/* ==========================================================================
+   Feature 3: Voice Sensitivity Gate & Mic Input Level Meter
+   ========================================================================== */
+.sensitivity-setting-card {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sensitivity-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sensitivity-label {
+  font-size: 13px;
+  color: var(--text-normal);
+  font-weight: 500;
+}
+
+/* Toggle Switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider.round {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #4e5058;
+  transition: 0.25s;
+  border-radius: 20px;
+}
+
+.slider.round:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  transition: 0.25s;
+  border-radius: 50%;
+}
+
+input:checked + .slider.round {
+  background-color: var(--green);
+}
+
+input:checked + .slider.round:before {
+  transform: translateX(18px);
+}
+
+/* Real-time Mic Meter */
+.mic-meter-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.mic-meter-track {
+  width: 100%;
+  height: 12px;
+  background-color: #1e1f22;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mic-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #23a55a, #57f287);
+  border-radius: 6px;
+  transition: width 0.05s ease-out;
+}
+
+.mic-meter-fill.under-gate {
+  background: #4e5058 !important;
+}
+
+.mic-meter-gate-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #fee75c;
+  box-shadow: 0 0 6px rgba(254, 231, 92, 0.8);
+  z-index: 2;
+  pointer-events: none;
+  transition: left 0.1s ease;
+}
+
+.mic-meter-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
+.mic-meter-status.active {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.slider-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   Feature 4: Quick Switcher / Universal Search (Ctrl+K)
+   ========================================================================== */
+.btn-top-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all var(--transition-fast);
+}
+
+.btn-top-search:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-normal);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.search-kbd-hint {
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.quick-switcher-overlay {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 99999;
+}
+
+.quick-switcher-window {
+  background: #2b2d31;
+  border-radius: 8px;
+  width: 580px;
+  max-width: 92vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+  animation: qsFadeIn 0.14s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes qsFadeIn {
+  from { opacity: 0; transform: scale(0.97) translateY(-8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.quick-switcher-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #1e1f22;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quick-switcher-search-icon {
+  display: flex;
+  color: var(--text-muted);
+}
+
+#quick-switcher-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 17px;
+  outline: none;
+  font-weight: 500;
+}
+
+#quick-switcher-input::placeholder {
+  color: var(--text-muted);
+}
+
+.quick-switcher-esc-badge {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.quick-switcher-results {
+  max-height: 380px;
+  min-height: 80px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quick-switcher-category {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 12px 4px;
+}
+
+.quick-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-normal);
+  transition: background 0.08s ease;
+}
+
+.quick-switcher-item.selected,
+.quick-switcher-item:hover {
+  background-color: rgba(88, 101, 242, 0.22);
+  color: #fff;
+}
+
+.quick-switcher-item-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.quick-switcher-item.selected .quick-switcher-item-icon {
+  color: #5865f2;
+}
+
+.quick-switcher-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.quick-switcher-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-switcher-item-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-switcher-highlight {
+  color: #5865f2;
+  font-weight: 700;
+  background: rgba(88, 101, 242, 0.18);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.quick-switcher-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #1e1f22;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.quick-switcher-footer kbd {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #fff;
+  font-family: monospace;
+}
+
+/* ==========================================================================
+   Feature 2: Floating Chat Overlay on Stream Focus
+   ========================================================================== */
+.btn-stream-chat-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-stream-chat-toggle:hover,
+.btn-stream-chat-toggle.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.stream-floating-chat {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  width: 340px;
+  max-width: calc(100% - 36px);
+  height: 250px;
+  background: rgba(17, 18, 20, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  animation: streamChatPop 0.15s ease-out;
+}
+
+@keyframes streamChatPop {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.stream-floating-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.stream-floating-chat-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-stream-chat-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.btn-stream-chat-close:hover {
+  color: #fff;
+}
+
+.stream-floating-chat-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.stream-floating-chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.stream-floating-chat-author {
+  font-weight: 700;
+  font-size: 11px;
+  color: #5865f2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stream-floating-chat-text {
+  color: rgba(255, 255, 255, 0.9);
+  word-break: break-word;
+}
+
+.stream-floating-chat-form {
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#stream-floating-chat-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+}
+
+#stream-floating-chat-input:focus {
+  border-color: var(--blurple);
+}
+
+/* ==========================================================================
+   Feature 5: Server Roles & Custom Nicknames
+   ========================================================================== */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}
+
+.role-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.role-badge.owner {
+  background: rgba(254, 231, 92, 0.18);
+  color: #fee75c;
+  border: 1px solid rgba(254, 231, 92, 0.4);
+}
+
+.role-badge.admin {
+  background: rgba(237, 66, 69, 0.18);
+  color: #ed4245;
+  border: 1px solid rgba(237, 66, 69, 0.4);
+}
+
+.role-badge.vip {
+  background: rgba(235, 69, 158, 0.18);
+  color: #eb459e;
+  border: 1px solid rgba(235, 69, 158, 0.4);
+}
+
+.role-badge.member {
+  background: rgba(148, 155, 164, 0.15);
+  color: #949ba4;
+  border: 1px solid rgba(148, 155, 164, 0.3);
+}
+
+.user-username-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+
 

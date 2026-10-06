@@ -198,23 +198,56 @@ io.on('connection', (socket) => {
 
   // Server creation
   socket.on('server:create', ({ name, icon }) => {
+    const user = activeUsers.get(socket.id);
     const serverId = 'srv-' + Math.random().toString(36).substring(2, 9);
     const srvInitials = (name || 'NH').split(/\s+/).map(w => w[0]).join('').substring(0, 2).toUpperCase();
     const newServer = {
       id: serverId,
       name: name || 'New Hangout',
       icon: icon || srvInitials,
+      ownerId: user ? user.userId : null,
       created: Date.now(),
       channels: [
         { id: `c-${serverId}-gen`, name: 'general', type: 'text' },
         { id: `v-${serverId}-gen`, name: 'Voice Lounge', type: 'voice' }
       ]
     };
+    if (!db.roles) db.roles = {};
+    if (!db.roles[serverId]) db.roles[serverId] = {};
+    if (user) db.roles[serverId][user.userId] = 'owner';
     db.servers[serverId] = newServer;
     saveStore();
 
     io.emit('server:list', Object.values(db.servers));
     socket.emit('server:created', newServer);
+  });
+
+  // Feature 5: Server Nicknames & Roles
+  socket.on('server:update_nickname', ({ serverId, nickname }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || !serverId) return;
+    if (!db.nicknames) db.nicknames = {};
+    if (!db.nicknames[serverId]) db.nicknames[serverId] = {};
+    if (nickname && nickname.trim()) {
+      db.nicknames[serverId][user.userId] = nickname.trim().substring(0, 32);
+    } else {
+      delete db.nicknames[serverId][user.userId];
+    }
+    saveStore();
+    broadcastServerPresence();
+  });
+
+  socket.on('server:update_role', ({ serverId, targetUserId, role }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || !serverId || !targetUserId) return;
+    if (!db.roles) db.roles = {};
+    if (!db.roles[serverId]) db.roles[serverId] = {};
+    const validRoles = ['owner', 'admin', 'vip', 'member'];
+    if (validRoles.includes(role)) {
+      db.roles[serverId][targetUserId] = role;
+      saveStore();
+      broadcastServerPresence();
+    }
   });
 
   // Channel creation
@@ -278,6 +311,8 @@ io.on('connection', (socket) => {
       user: {
         id: user.userId,
         name: user.name,
+        nickname: (serverId && db.nicknames?.[serverId]?.[user.userId]) || null,
+        role: (serverId && db.roles?.[serverId]?.[user.userId]) || (serverId && db.servers[serverId]?.ownerId === user.userId ? 'owner' : 'member'),
         avatarColor: user.avatarColor,
         avatarUrl: user.avatarUrl || null
       },
@@ -611,11 +646,23 @@ function broadcastServerPresence() {
 
   for (const [_, user] of activeUsers.entries()) {
     if (!user.serverId) continue;
-    const srvName = db.servers[user.serverId] ? db.servers[user.serverId].name : 'Hangout';
+    const serverObj = db.servers[user.serverId];
+    const srvName = serverObj ? serverObj.name : 'Hangout';
+    const nickname = (db.nicknames && db.nicknames[user.serverId] && db.nicknames[user.serverId][user.userId]) || null;
+    let role = (db.roles && db.roles[user.serverId] && db.roles[user.serverId][user.userId]) || null;
+    if (!role) {
+      if (serverObj && serverObj.ownerId === user.userId) {
+        role = 'owner';
+      } else {
+        role = 'member';
+      }
+    }
     const memberObj = {
       socketId: user.socketId,
       userId: user.userId,
       name: user.name,
+      nickname: nickname,
+      role: role,
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl || null,
       serverId: user.serverId,

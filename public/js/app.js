@@ -169,6 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="ctx-item" id="ctx-action-edit-profile">
           <div class="ctx-item-left"><span>${window.ICONS.edit}</span><span>Edit Profile & Avatar</span></div>
         </div>
+        <div class="ctx-item" id="ctx-action-change-my-nickname">
+          <div class="ctx-item-left"><span>${window.ICONS.edit}</span><span>Change Server Nickname</span></div>
+        </div>
         <div class="ctx-item" id="ctx-action-toggle-mute">
           <div class="ctx-item-left"><span>${isMuted ? window.ICONS.micMuted : window.ICONS.mic}</span><span>${isMuted ? 'Unmute Microphone' : 'Mute Microphone'}</span></div>
         </div>
@@ -198,6 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="ctx-item" id="ctx-action-mention">
           <div class="ctx-item-left"><span>${window.ICONS.chat}</span><span>Mention (@${escapeHtml(targetUser.name)})</span></div>
         </div>
+        <div class="ctx-item" id="ctx-action-change-user-nickname">
+          <div class="ctx-item-left"><span>${window.ICONS.edit}</span><span>Change Server Nickname</span></div>
+        </div>
         <div class="ctx-item" id="ctx-action-mute-peer">
           <div class="ctx-item-left">
             <span>${isLocallyMuted ? window.ICONS.speakerMuted : window.ICONS.speaker}</span>
@@ -214,6 +220,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="ctx-slider-val" id="ctx-vol-val">${isLocallyMuted ? '0%' : peerVol + '%'}</span>
           </div>
           <input type="range" class="ctx-slider-input" id="ctx-vol-slider" min="0" max="150" value="${isLocallyMuted ? 0 : peerVol}" />
+        </div>
+
+        <div class="ctx-divider"></div>
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); padding: 4px 10px 2px; text-transform: uppercase;">Server Roles</div>
+        <div class="ctx-item" id="ctx-role-admin">
+          <div class="ctx-item-left"><span style="color: #ed4245;">${window.ICONS.shield}</span><span>Assign Admin Role</span></div>
+        </div>
+        <div class="ctx-item" id="ctx-role-vip">
+          <div class="ctx-item-left"><span style="color: #eb459e;">${window.ICONS.star}</span><span>Assign VIP Role</span></div>
+        </div>
+        <div class="ctx-item" id="ctx-role-member">
+          <div class="ctx-item-left"><span style="color: #949ba4;">${window.ICONS.users}</span><span>Set as Member</span></div>
         </div>
 
         <div class="ctx-divider"></div>
@@ -328,6 +346,67 @@ document.addEventListener('DOMContentLoaded', () => {
         voiceManager.setPeerVolume(targetUser.socketId, targetUser.userId, val / 100);
         volVal.textContent = val + '%';
         renderVoiceStage();
+      };
+    }
+
+    const myNickBtn = document.getElementById('ctx-action-change-my-nickname');
+    if (myNickBtn) {
+      myNickBtn.onclick = () => {
+        closeContextMenu();
+        if (!currentServer) return;
+        const cur = (serverMembers.find(m => m.userId === user.userId)?.nickname) || '';
+        const newNick = window.prompt('Enter your server nickname (leave blank to reset):', cur);
+        if (newNick !== null) {
+          socket.emit('server:update_nickname', { serverId: currentServer.id, nickname: newNick.trim() });
+          showToast('Nickname updated!');
+        }
+      };
+    }
+
+    const userNickBtn = document.getElementById('ctx-action-change-user-nickname');
+    if (userNickBtn) {
+      userNickBtn.onclick = () => {
+        closeContextMenu();
+        if (!currentServer) return;
+        const cur = targetUser.nickname || '';
+        const newNick = window.prompt(`Enter nickname for ${targetUser.name} (leave blank to reset):`, cur);
+        if (newNick !== null) {
+          socket.emit('server:update_nickname', { serverId: currentServer.id, nickname: newNick.trim() });
+          showToast(`Nickname updated for ${targetUser.name}!`);
+        }
+      };
+    }
+
+    const roleAdminBtn = document.getElementById('ctx-role-admin');
+    if (roleAdminBtn) {
+      roleAdminBtn.onclick = () => {
+        closeContextMenu();
+        if (currentServer) {
+          socket.emit('server:update_role', { serverId: currentServer.id, targetUserId: targetUser.userId, role: 'admin' });
+          showToast(`Assigned Admin role to ${targetUser.name}`);
+        }
+      };
+    }
+
+    const roleVipBtn = document.getElementById('ctx-role-vip');
+    if (roleVipBtn) {
+      roleVipBtn.onclick = () => {
+        closeContextMenu();
+        if (currentServer) {
+          socket.emit('server:update_role', { serverId: currentServer.id, targetUserId: targetUser.userId, role: 'vip' });
+          showToast(`Assigned VIP role to ${targetUser.name}`);
+        }
+      };
+    }
+
+    const roleMemberBtn = document.getElementById('ctx-role-member');
+    if (roleMemberBtn) {
+      roleMemberBtn.onclick = () => {
+        closeContextMenu();
+        if (currentServer) {
+          socket.emit('server:update_role', { serverId: currentServer.id, targetUserId: targetUser.userId, role: 'member' });
+          showToast(`Set ${targetUser.name} as Member`);
+        }
       };
     }
   }
@@ -934,6 +1013,9 @@ document.addEventListener('DOMContentLoaded', () => {
                   <span class="stream-res-badge">${currentStreamQuality.toUpperCase()}</span>
                 </div>
                 <div class="stream-top-actions">
+                  <button class="btn-stream-chat-toggle" id="btn-stream-chat-toggle" title="Toggle Live Chat Overlay (C)">
+                    ${window.ICONS.chat}
+                  </button>
                   <button class="btn-theater-stream" id="btn-theater-stream" title="Theater Mode (T)">
                     ${isTheaterMode ? window.ICONS.theaterExit : window.ICONS.theater}
                   </button>
@@ -944,6 +1026,19 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
               <div class="stream-media-wrap" id="stream-media-wrap" title="Double click to toggle fullscreen">
                 <video id="my-screen-video" autoplay muted playsinline></video>
+                <div class="stream-floating-chat" id="stream-floating-chat" style="display: none;">
+                  <div class="stream-floating-chat-header">
+                    <div class="stream-floating-chat-title">
+                      ${window.ICONS.chat}
+                      <span>#${escapeHtml(currentChannel ? currentChannel.name : 'stream-chat')} (Live Chat)</span>
+                    </div>
+                    <button class="btn-stream-chat-close" id="btn-stream-chat-close" title="Close Chat">&times;</button>
+                  </div>
+                  <div class="stream-floating-chat-feed" id="stream-floating-chat-feed"></div>
+                  <form class="stream-floating-chat-form" id="stream-floating-chat-form">
+                    <input type="text" id="stream-floating-chat-input" placeholder="Message stream chat..." autocomplete="off" />
+                  </form>
+                </div>
               </div>
             </div>
           `;
@@ -956,6 +1051,9 @@ document.addEventListener('DOMContentLoaded', () => {
                   <span class="stream-owner-name">${escapeHtml(peerScreenSharer.name)}'s Stream</span>
                 </div>
                 <div class="stream-top-actions">
+                  <button class="btn-stream-chat-toggle" id="btn-stream-chat-toggle" title="Toggle Live Chat Overlay (C)">
+                    ${window.ICONS.chat}
+                  </button>
                   <button class="btn-theater-stream" id="btn-theater-stream" title="Theater Mode (T)">
                     ${isTheaterMode ? window.ICONS.theaterExit : window.ICONS.theater}
                   </button>
@@ -976,6 +1074,20 @@ document.addEventListener('DOMContentLoaded', () => {
                   <button class="btn-watch-stream" data-socket-id="${peerScreenSharer.socketId}">
                     ${window.ICONS.screenShare} Watch Stream
                   </button>
+                </div>
+
+                <div class="stream-floating-chat" id="stream-floating-chat" style="display: none;">
+                  <div class="stream-floating-chat-header">
+                    <div class="stream-floating-chat-title">
+                      ${window.ICONS.chat}
+                      <span>#${escapeHtml(currentChannel ? currentChannel.name : 'stream-chat')} (Live Chat)</span>
+                    </div>
+                    <button class="btn-stream-chat-close" id="btn-stream-chat-close" title="Close Chat">&times;</button>
+                  </div>
+                  <div class="stream-floating-chat-feed" id="stream-floating-chat-feed"></div>
+                  <form class="stream-floating-chat-form" id="stream-floating-chat-form">
+                    <input type="text" id="stream-floating-chat-input" placeholder="Message stream chat..." autocomplete="off" />
+                  </form>
                 </div>
               </div>
             </div>
@@ -1017,6 +1129,63 @@ document.addEventListener('DOMContentLoaded', () => {
           mediaWrap.ondblclick = (e) => {
             e.stopPropagation();
             toggleStreamFullscreen(focusContainer);
+          };
+        }
+
+        const btnStreamChat = stageStreamFocus.querySelector('#btn-stream-chat-toggle');
+        const floatingChat = stageStreamFocus.querySelector('#stream-floating-chat');
+        const btnStreamChatClose = stageStreamFocus.querySelector('#btn-stream-chat-close');
+        const streamChatForm = stageStreamFocus.querySelector('#stream-floating-chat-form');
+        const streamChatInput = stageStreamFocus.querySelector('#stream-floating-chat-input');
+        const streamChatFeed = stageStreamFocus.querySelector('#stream-floating-chat-feed');
+
+        function updateStreamChatOverlay() {
+          if (!streamChatFeed) return;
+          const recent = cachedMessages.slice(-15);
+          streamChatFeed.innerHTML = recent.map(m => `
+            <div class="stream-floating-chat-msg">
+              <div class="stream-floating-chat-author">
+                <span>${escapeHtml(m.user.nickname || m.user.name)}</span>
+                ${renderRoleBadge(m.user.role)}
+              </div>
+              <div class="stream-floating-chat-text">${escapeHtml(m.text || (m.attachment ? 'Attachment' : ''))}</div>
+            </div>
+          `).join('');
+          streamChatFeed.scrollTop = streamChatFeed.scrollHeight;
+        }
+
+        if (btnStreamChat && floatingChat) {
+          btnStreamChat.onclick = (e) => {
+            e.stopPropagation();
+            const isVisible = floatingChat.style.display !== 'none';
+            floatingChat.style.display = isVisible ? 'none' : 'flex';
+            btnStreamChat.classList.toggle('active', !isVisible);
+            if (!isVisible) {
+              updateStreamChatOverlay();
+              if (streamChatInput) streamChatInput.focus();
+            }
+          };
+        }
+
+        if (btnStreamChatClose && floatingChat) {
+          btnStreamChatClose.onclick = (e) => {
+            e.stopPropagation();
+            floatingChat.style.display = 'none';
+            if (btnStreamChat) btnStreamChat.classList.remove('active');
+          };
+        }
+
+        if (streamChatForm && streamChatInput) {
+          streamChatForm.onsubmit = (e) => {
+            e.preventDefault();
+            const text = streamChatInput.value.trim();
+            if (!text || !currentChannel) return;
+            socket.emit('chat:send', {
+              serverId: currentServer ? currentServer.id : null,
+              channelId: currentChannel.id,
+              text
+            });
+            streamChatInput.value = '';
           };
         }
 
@@ -1325,6 +1494,14 @@ document.addEventListener('DOMContentLoaded', () => {
     scrollToBottom();
   }
 
+  function renderRoleBadge(role) {
+    if (!role || role === 'member') return '';
+    if (role === 'owner') return `<span class="role-badge owner" title="Server Owner">${window.ICONS.crown} Owner</span>`;
+    if (role === 'admin') return `<span class="role-badge admin" title="Server Admin">${window.ICONS.shield} Admin</span>`;
+    if (role === 'vip') return `<span class="role-badge vip" title="VIP Member">${window.ICONS.star} VIP</span>`;
+    return '';
+  }
+
   function appendChatMessage(msg) {
     const card = document.createElement('div');
     card.className = 'message-card';
@@ -1366,6 +1543,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reactions HTML
     const reactionsHtml = buildReactionsHtml(msg.id, msg.reactions);
 
+    const authorDisplayName = msg.user.nickname || msg.user.name;
+    const authorRoleBadge = renderRoleBadge(msg.user.role);
+    const authorHandleHtml = msg.user.nickname ? `<span class="user-username-sub">(@${escapeHtml(msg.user.name)})</span>` : '';
+
     card.innerHTML = `
       <div class="message-actions-bar">
         <button class="btn-msg-react" data-msg-id="${msg.id}" title="Add Reaction">
@@ -1378,7 +1559,9 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
       <div class="message-content-wrapper">
         <div class="message-header">
-          <span class="message-author">${escapeHtml(msg.user.name)}</span>
+          <span class="message-author">${escapeHtml(authorDisplayName)}</span>
+          ${authorHandleHtml}
+          ${authorRoleBadge}
           <span class="message-timestamp">${timeStr}</span>
         </div>
         <div class="message-text">${parseMarkdown(msg.text)}</div>
@@ -1413,6 +1596,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     messagesFeed.appendChild(card);
     scrollToBottom();
+
+    // Also update stream floating chat overlay feed if active
+    const floatFeed = document.getElementById('stream-floating-chat-feed');
+    if (floatFeed) {
+      const floatMsg = document.createElement('div');
+      floatMsg.className = 'stream-floating-chat-msg';
+      floatMsg.innerHTML = `
+        <div class="stream-floating-chat-author">
+          <span>${escapeHtml(authorDisplayName)}</span>
+          ${authorRoleBadge}
+        </div>
+        <div class="stream-floating-chat-text">${escapeHtml(msg.text || (msg.attachment ? 'Attachment' : ''))}</div>
+      `;
+      floatFeed.appendChild(floatMsg);
+      floatFeed.scrollTop = floatFeed.scrollHeight;
+    }
   }
 
   function buildReactionsHtml(msgId, reactions) {
@@ -1577,10 +1776,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="member-info">
           <div class="member-name">
-            ${escapeHtml(m.name)}
+            ${escapeHtml(m.nickname || m.name)}
+            ${renderRoleBadge(m.role)}
             ${isMe ? '<span style="font-size: 11px; opacity: 0.6; margin-left: 4px;">(You)</span>' : ''}
           </div>
-          <div class="member-role">${m.voiceChannelId ? 'In Voice' : 'Online'}</div>
+          <div class="member-role">${m.nickname ? `${escapeHtml(m.name)} • ${m.voiceChannelId ? 'In Voice' : 'Online'}` : (m.voiceChannelId ? 'In Voice' : (m.role ? m.role.toUpperCase() : 'Online'))}</div>
         </div>
         ${isMutedLocally ? `<span style="color: var(--red); display: flex;" title="Locally Muted">${window.ICONS.speakerMuted}</span>` : ''}
       `;
@@ -1678,13 +1878,22 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   });
 
-  // Global Key Event Listeners: Theater Mode (T), Fullscreen (F), PTT
+  // Global Key Event Listeners: Quick Switcher (Ctrl+K), Theater Mode (T), Fullscreen (F), Stream Chat (C), PTT
   window.addEventListener('keydown', (e) => {
-    // Avoid triggering when typing in text inputs or recording keybind
+    // Quick Switcher shortcut: Ctrl+K or Cmd+K
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      if (window.openQuickSwitcher) {
+        window.openQuickSwitcher();
+      }
+      return;
+    }
+
+    // Avoid triggering single-letter shortcuts when typing in text inputs or recording keybind
     if (isRecordingPttKey) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
 
-    // Theater Mode and Fullscreen keyboard shortcuts
+    // Theater Mode, Fullscreen, and Stream Chat keyboard shortcuts
     if (activeVoiceChannel) {
       if (e.key === 't' || e.key === 'T') {
         toggleTheaterMode();
@@ -1697,16 +1906,33 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
       }
-      if (e.key === 'Escape' && isTheaterMode) {
-        toggleTheaterMode();
-        return;
+      if (e.key === 'c' || e.key === 'C') {
+        const btnStreamChat = document.getElementById('btn-stream-chat-toggle');
+        if (btnStreamChat) {
+          btnStreamChat.click();
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        const floatingChat = document.getElementById('stream-floating-chat');
+        if (floatingChat && floatingChat.style.display !== 'none') {
+          floatingChat.style.display = 'none';
+          const btnChat = document.getElementById('btn-stream-chat-toggle');
+          if (btnChat) btnChat.classList.remove('active');
+          return;
+        }
+        if (isTheaterMode) {
+          toggleTheaterMode();
+          return;
+        }
       }
     }
 
     if (voiceManager.inputMode !== 'ptt' || !activeVoiceChannel) return;
 
-    const pressedKey = e.code === 'Space' ? 'Space' : e.key;
+    const pressedKey = e.code === 'Space' ? 'Space' : (e.code === 'CapsLock' ? 'CapsLock' : e.key);
     if (pressedKey.toLowerCase() === currentPttKey.toLowerCase()) {
+      e.preventDefault();
       if (!e.repeat) {
         voiceManager.setPttActive(true);
       }
@@ -1717,8 +1943,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isRecordingPttKey) return;
     if (voiceManager.inputMode !== 'ptt' || !activeVoiceChannel) return;
 
-    const pressedKey = e.code === 'Space' ? 'Space' : e.key;
+    const pressedKey = e.code === 'Space' ? 'Space' : (e.code === 'CapsLock' ? 'CapsLock' : e.key);
     if (pressedKey.toLowerCase() === currentPttKey.toLowerCase()) {
+      e.preventDefault();
       voiceManager.setPttActive(false);
     }
   });
@@ -1822,6 +2049,91 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Feature 3: Voice Sensitivity & Mic Level Meter
+  let isTestingMic = false;
+  const btnTestMic = document.getElementById('btn-test-mic');
+  const micMeterFill = document.getElementById('mic-meter-fill');
+  const micMeterStatus = document.getElementById('mic-meter-status');
+  const chkAutoSens = document.getElementById('chk-auto-sensitivity');
+  const manualSensRow = document.getElementById('manual-sensitivity-row');
+  const sliderSensGate = document.getElementById('slider-sensitivity-gate');
+  const gateMarker = document.getElementById('mic-meter-gate-marker');
+  const gateVal = document.getElementById('mic-meter-gate-val');
+
+  function updateMicMeterDisplay(level, isAboveGate) {
+    if (!micMeterFill) return;
+    const pct = Math.min(100, Math.round(level * 100));
+    micMeterFill.style.width = pct + '%';
+    micMeterFill.classList.toggle('under-gate', !isAboveGate);
+    if (micMeterStatus) {
+      if (pct > 2) {
+        micMeterStatus.textContent = isAboveGate ? 'Input Active (Transmitting)' : 'Noise Gate (Filtered)';
+        micMeterStatus.classList.toggle('active', isAboveGate);
+      } else {
+        micMeterStatus.textContent = isTestingMic ? 'Listening...' : (activeVoiceChannel ? 'Ready' : 'Mic Inactive');
+        micMeterStatus.classList.remove('active');
+      }
+    }
+  }
+
+  voiceManager.onMicLevelUpdate = updateMicMeterDisplay;
+
+  if (chkAutoSens) {
+    chkAutoSens.onchange = () => {
+      const isAuto = chkAutoSens.checked;
+      if (manualSensRow) manualSensRow.style.display = isAuto ? 'none' : 'block';
+      const thresh = sliderSensGate ? (parseFloat(sliderSensGate.value) / 1000) : 0.02;
+      voiceManager.setSensitivity(isAuto, thresh);
+      if (gateMarker && gateVal) {
+        if (isAuto) {
+          gateMarker.style.left = '18%';
+          gateVal.textContent = 'Gate: Auto';
+        } else {
+          gateMarker.style.left = sliderSensGate.value + '%';
+          gateVal.textContent = `Gate: ${sliderSensGate.value}%`;
+        }
+      }
+    };
+  }
+
+  if (sliderSensGate) {
+    sliderSensGate.oninput = () => {
+      const val = sliderSensGate.value;
+      if (gateMarker) gateMarker.style.left = val + '%';
+      if (gateVal) gateVal.textContent = `Gate: ${val}%`;
+      voiceManager.setSensitivity(false, parseFloat(val) / 1000);
+    };
+  }
+
+  function stopActiveMicTest() {
+    if (isTestingMic) {
+      voiceManager.stopMicTest();
+      isTestingMic = false;
+      if (btnTestMic) {
+        btnTestMic.textContent = 'Test Microphone';
+        btnTestMic.classList.remove('danger');
+      }
+      updateMicMeterDisplay(0, false);
+    }
+  }
+
+  if (btnTestMic) {
+    btnTestMic.onclick = async () => {
+      if (!isTestingMic) {
+        const ok = await voiceManager.startMicTest(updateMicMeterDisplay);
+        if (ok) {
+          isTestingMic = true;
+          btnTestMic.textContent = 'Stop Mic Test';
+          btnTestMic.classList.add('danger');
+        } else {
+          showToast('Could not access microphone');
+        }
+      } else {
+        stopActiveMicTest();
+      }
+    };
+  }
+
   btnUserSettings.onclick = () => {
     document.getElementById('input-profile-name').value = user.name;
     tempAvatarUrl = user.avatarUrl || null;
@@ -1840,6 +2152,21 @@ document.addEventListener('DOMContentLoaded', () => {
     optModePtt.classList.toggle('selected', currentInputMode === 'ptt');
     pttKeybindGroup.style.display = currentInputMode === 'ptt' ? 'block' : 'none';
     pttKeybindText.textContent = currentPttKey;
+
+    // Sensitivity controls setup
+    if (chkAutoSens && manualSensRow && sliderSensGate && gateMarker && gateVal) {
+      chkAutoSens.checked = voiceManager.autoSensitivity;
+      manualSensRow.style.display = voiceManager.autoSensitivity ? 'none' : 'block';
+      const curThresholdPct = Math.min(60, Math.max(1, Math.round(voiceManager.sensitivityThreshold * 1000)));
+      sliderSensGate.value = curThresholdPct;
+      if (voiceManager.autoSensitivity) {
+        gateMarker.style.left = '18%';
+        gateVal.textContent = 'Gate: Auto';
+      } else {
+        gateMarker.style.left = curThresholdPct + '%';
+        gateVal.textContent = `Gate: ${curThresholdPct}%`;
+      }
+    }
 
     openModal(modalProfile);
   };
@@ -1899,7 +2226,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const onKeyRecord = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const recorded = e.code === 'Space' ? 'Space' : e.key;
+      const recorded = (e.code === 'Space') ? 'Space' : ((e.code === 'CapsLock' || e.key === 'CapsLock') ? 'CapsLock' : (e.key.length === 1 ? e.key.toUpperCase() : e.key));
       currentPttKey = recorded;
       pttKeybindText.textContent = currentPttKey;
       btnPttKeybind.classList.remove('recording');
@@ -2105,6 +2432,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function closeModal(modal) {
+    if (modal === modalProfile) {
+      stopActiveMicTest();
+    }
     modal.classList.remove('open');
     modal.style.display = 'none';
   }
@@ -2156,4 +2486,201 @@ document.addEventListener('DOMContentLoaded', () => {
     escaped = escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" style="color: var(--text-link); text-decoration: underline;">$1</a>');
     return escaped;
   }
+
+  // --- Feature 4: Quick Switcher / Universal Search (Ctrl+K) ---
+  function initQuickSwitcher() {
+    const modal = document.getElementById('modal-quick-switcher');
+    const input = document.getElementById('quick-switcher-input');
+    const resultsContainer = document.getElementById('quick-switcher-results');
+    const btnTopSearch = document.getElementById('btn-top-search');
+
+    if (!modal || !input || !resultsContainer) return;
+
+    let activeIndex = 0;
+    let currentResults = [];
+
+    function openQuickSwitcher() {
+      modal.style.display = 'flex';
+      input.value = '';
+      activeIndex = 0;
+      renderResults('');
+      setTimeout(() => input.focus(), 60);
+    }
+
+    function closeQuickSwitcher() {
+      modal.style.display = 'none';
+    }
+
+    if (btnTopSearch) {
+      btnTopSearch.onclick = openQuickSwitcher;
+    }
+
+    modal.onclick = (e) => {
+      if (e.target === modal) closeQuickSwitcher();
+    };
+
+    function highlightMatch(text, query) {
+      if (!query) return escapeHtml(text);
+      const safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${safeQ})`, 'gi');
+      return escapeHtml(text).replace(regex, '<span class="quick-switcher-highlight">$1</span>');
+    }
+
+    function renderResults(query) {
+      const q = query.trim().toLowerCase();
+      currentResults = [];
+
+      // 1. Text & Voice Channels in current server
+      if (currentServer && currentServer.channels) {
+        currentServer.channels.forEach(ch => {
+          if (!q || ch.name.toLowerCase().includes(q)) {
+            currentResults.push({
+              type: ch.type === 'voice' ? 'voice-channel' : 'text-channel',
+              title: ch.name,
+              subtitle: `${currentServer.name} • ${ch.type === 'voice' ? 'Voice Channel' : 'Text Channel'}`,
+              action: () => {
+                if (ch.type === 'voice') {
+                  joinVoiceChannel(ch.id);
+                } else {
+                  selectChannel(ch.id);
+                }
+              }
+            });
+          }
+        });
+      }
+
+      // 2. Direct Messages / Members
+      serverMembers.forEach(m => {
+        if (m.userId !== user.userId) {
+          const nameMatch = m.name.toLowerCase().includes(q) || (m.nickname && m.nickname.toLowerCase().includes(q));
+          if (!q || nameMatch) {
+            currentResults.push({
+              type: 'dm',
+              title: m.nickname ? `${m.nickname} (@${m.name})` : m.name,
+              subtitle: `Direct Message • ${m.role ? m.role.toUpperCase() : 'MEMBER'}`,
+              action: () => {
+                openDirectMessage(m);
+              }
+            });
+          }
+        }
+      });
+
+      // 3. Message History Search
+      if (q.length >= 2 && cachedMessages && cachedMessages.length > 0) {
+        cachedMessages.forEach(msg => {
+          if (msg.text && msg.text.toLowerCase().includes(q)) {
+            const author = msg.user ? (msg.user.nickname || msg.user.name) : 'User';
+            currentResults.push({
+              type: 'message',
+              title: msg.text,
+              subtitle: `Message by ${author} in #${currentChannel ? currentChannel.name : 'chat'}`,
+              action: () => {
+                const msgCard = document.querySelector(`.message-card[data-msg-id="${msg.id}"]`);
+                if (msgCard) {
+                  msgCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  msgCard.style.transition = 'background-color 0.5s';
+                  msgCard.style.backgroundColor = 'rgba(88, 101, 242, 0.35)';
+                  setTimeout(() => { msgCard.style.backgroundColor = ''; }, 1600);
+                }
+              }
+            });
+          }
+        });
+      }
+
+      if (activeIndex >= currentResults.length) activeIndex = 0;
+
+      if (currentResults.length === 0) {
+        resultsContainer.innerHTML = `
+          <div style="padding: 28px; text-align: center; color: var(--text-muted); font-size: 13px;">
+            No channels, direct messages, or messages match "<strong>${escapeHtml(query)}</strong>"
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      let lastType = null;
+      currentResults.forEach((item, idx) => {
+        let catHeading = '';
+        if (item.type !== lastType) {
+          lastType = item.type;
+          const headingText = item.type === 'text-channel' ? 'Text Channels' :
+                              item.type === 'voice-channel' ? 'Voice Channels' :
+                              item.type === 'dm' ? 'Direct Messages' : 'Chat History';
+          catHeading = `<div class="quick-switcher-category">${headingText}</div>`;
+        }
+
+        const icon = item.type === 'text-channel' ? window.ICONS.hash :
+                     item.type === 'voice-channel' ? window.ICONS.speaker :
+                     item.type === 'dm' ? window.ICONS.chat : window.ICONS.edit;
+
+        const isSelected = idx === activeIndex ? 'selected' : '';
+
+        html += `
+          ${catHeading}
+          <div class="quick-switcher-item ${isSelected}" data-index="${idx}">
+            <span class="quick-switcher-item-icon">${icon}</span>
+            <div class="quick-switcher-item-content">
+              <span class="quick-switcher-item-title">${highlightMatch(item.title, q)}</span>
+              <span class="quick-switcher-item-subtitle">${escapeHtml(item.subtitle)}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      resultsContainer.innerHTML = html;
+
+      resultsContainer.querySelectorAll('.quick-switcher-item').forEach(itemEl => {
+        itemEl.onclick = () => {
+          const idx = parseInt(itemEl.dataset.index, 10);
+          if (currentResults[idx]) {
+            closeQuickSwitcher();
+            currentResults[idx].action();
+          }
+        };
+      });
+    }
+
+    input.oninput = () => {
+      activeIndex = 0;
+      renderResults(input.value);
+    };
+
+    input.onkeydown = (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (currentResults.length > 0) {
+          activeIndex = (activeIndex + 1) % currentResults.length;
+          renderResults(input.value);
+          const sel = resultsContainer.querySelector('.quick-switcher-item.selected');
+          if (sel) sel.scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentResults.length > 0) {
+          activeIndex = (activeIndex - 1 + currentResults.length) % currentResults.length;
+          renderResults(input.value);
+          const sel = resultsContainer.querySelector('.quick-switcher-item.selected');
+          if (sel) sel.scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentResults[activeIndex]) {
+          closeQuickSwitcher();
+          currentResults[activeIndex].action();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeQuickSwitcher();
+      }
+    };
+
+    window.openQuickSwitcher = openQuickSwitcher;
+    window.closeQuickSwitcher = closeQuickSwitcher;
+  }
+
+  initQuickSwitcher();
 });
