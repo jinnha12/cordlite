@@ -124,7 +124,9 @@ app.get('/api/turn-servers', async (req, res) => {
 
   if (appName && apiKey) {
     try {
-      const response = await fetch(`https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`);
+      const cleanDomain = appName.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const domain = cleanDomain.includes('.') ? cleanDomain : `${cleanDomain}.metered.live`;
+      const response = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`);
       if (response.ok) {
         const iceServers = await response.json();
         return res.json(iceServers);
