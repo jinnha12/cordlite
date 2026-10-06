@@ -5,36 +5,40 @@ class WebRTCVoiceManager {
   constructor(socket) {
     this.socket = socket;
     this.localStream = null;
-    this.peers = new Map(); // socketId -> { pc, audioEl, isSpeaking, name, avatarColor, pendingCandidates }
+    this.peers = new Map(); // socketId -> { pc, audioEl, audioNode, isSpeaking, name, avatarColor, pendingCandidates }
     this.currentChannelId = null;
     this.isMuted = false;
     this.isDeafened = false;
 
-    // STUN + Free OpenRelay TURN servers (supports UDP + TCP over 80/443 to pierce symmetric NAT and firewalls)
+    // STUN + Fallback TURN servers
     this.iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelay',
-        credential: 'openrelay'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelay',
-        credential: 'openrelay'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelay',
-        credential: 'openrelay'
-      }
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
     ];
 
     this.onPeersUpdateCallback = null;
     this.setupSocketEvents();
+    this.fetchTurnServers();
+  }
+
+  // Fetch dynamic TURN servers from server if configured
+  async fetchTurnServers() {
+    try {
+      const res = await fetch('/api/turn-servers');
+      if (res.ok) {
+        const customServers = await res.json();
+        if (Array.isArray(customServers) && customServers.length > 0) {
+          this.iceServers = customServers;
+          console.log('[WebRTC] Loaded dynamic ICE servers:', this.iceServers);
+        }
+      }
+    } catch (e) {
+      // Use built-in servers
+    }
   }
 
   setPeersUpdateCallback(cb) {
@@ -45,6 +49,7 @@ class WebRTCVoiceManager {
     // When we join, server gives list of existing occupants in that voice channel
     this.socket.on('voice:current_peers', async ({ channelId, peers }) => {
       this.currentChannelId = channelId;
+      console.log('[WebRTC] Existing peers in room:', peers);
       for (const peer of peers) {
         await this.initiatePeerConnection(peer.socketId, peer, true);
       }
@@ -53,6 +58,7 @@ class WebRTCVoiceManager {
 
     // When someone joins after us
     this.socket.on('voice:user_joined', async (peer) => {
+      console.log('[WebRTC] New peer joined voice channel:', peer);
       await this.initiatePeerConnection(peer.socketId, peer, false);
       this.notifyPeersUpdate();
     });
@@ -70,6 +76,7 @@ class WebRTCVoiceManager {
 
       try {
         if (signal.type === 'offer') {
+          console.log(`[WebRTC] Received OFFER from ${fromUser.name}`);
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
           await this.flushPendingCandidates(peerData);
 
@@ -81,6 +88,7 @@ class WebRTCVoiceManager {
             signal: pc.localDescription
           });
         } else if (signal.type === 'answer') {
+          console.log(`[WebRTC] Received ANSWER from ${fromUser.name}`);
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
           await this.flushPendingCandidates(peerData);
         } else if (signal.candidate) {
@@ -183,6 +191,12 @@ class WebRTCVoiceManager {
   }
 
   async joinVoice(serverId, channelId) {
+    // Ensure Web Audio context is resumed on user click
+    const ctx = window.audioManager.getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
     await this.acquireLocalAudio();
     this.currentChannelId = channelId;
     this.socket.emit('voice:join', { serverId, channelId });
@@ -217,8 +231,21 @@ class WebRTCVoiceManager {
       iceCandidatePoolSize: 10
     });
 
-    const audioEl = new Audio();
+    // Ensure audio element is appended to DOM (fixes Chrome detached element silence bug)
+    let audioContainer = document.getElementById('remote-audio-container');
+    if (!audioContainer) {
+      audioContainer = document.createElement('div');
+      audioContainer.id = 'remote-audio-container';
+      audioContainer.style.position = 'fixed';
+      audioContainer.style.bottom = '-9999px';
+      document.body.appendChild(audioContainer);
+    }
+
+    const audioEl = document.createElement('audio');
+    audioEl.id = `remote-audio-${peerSocketId}`;
     audioEl.autoplay = true;
+    audioEl.playsInline = true;
+    audioContainer.appendChild(audioEl);
 
     const peerData = {
       socketId: peerSocketId,
@@ -230,11 +257,12 @@ class WebRTCVoiceManager {
       isDeafened: peerUser.isDeafened || false,
       pc,
       audioEl,
+      audioNode: null,
       pendingCandidates: []
     };
     this.peers.set(peerSocketId, peerData);
 
-    // Add local tracks to peer connection
+    // Add local audio tracks to peer connection
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
         pc.addTrack(track, this.localStream);
@@ -243,11 +271,38 @@ class WebRTCVoiceManager {
 
     // Handle incoming remote audio stream
     pc.ontrack = (event) => {
+      console.log(`[WebRTC] Received remote audio stream from ${peerUser.name}!`);
       audioEl.srcObject = event.streams[0];
       audioEl.muted = this.isDeafened;
-      audioEl.play().catch(e => {
-        console.warn('Audio auto-play waiting for user interaction:', e);
-      });
+      audioEl.volume = 1.0;
+
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => {
+          console.warn('[WebRTC] Autoplay waiting for page click:', e);
+          const resumeAudioOnDocClick = () => {
+            audioEl.play().catch(() => {});
+            document.removeEventListener('click', resumeAudioOnDocClick);
+          };
+          document.addEventListener('click', resumeAudioOnDocClick);
+        });
+      }
+
+      // Also route stream via Web Audio API context for guaranteed non-muted playback
+      try {
+        const ctx = window.audioManager.getAudioContext();
+        if (ctx) {
+          if (ctx.state === 'suspended') ctx.resume();
+          const source = ctx.createMediaStreamSource(event.streams[0]);
+          const gain = ctx.createGain();
+          gain.gain.value = 1.0;
+          source.connect(gain);
+          gain.connect(ctx.destination);
+          peerData.audioNode = source;
+        }
+      } catch (err) {
+        console.warn('[WebRTC] Web Audio routing notice:', err);
+      }
     };
 
     // Forward ICE candidates to signaling server
@@ -260,7 +315,10 @@ class WebRTCVoiceManager {
       }
     };
 
-    // Auto restart ICE if connection is interrupted
+    pc.onconnectionstatechange = () => {
+      console.log(`[WebRTC Connection with ${peerUser.name}]:`, pc.connectionState);
+    };
+
     pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC ICE State with ${peerUser.name}]:`, pc.iceConnectionState);
       if (pc.iceConnectionState === 'failed') {
@@ -292,7 +350,13 @@ class WebRTCVoiceManager {
 
     try {
       peerData.pc.close();
-      peerData.audioEl.srcObject = null;
+      if (peerData.audioEl) {
+        peerData.audioEl.srcObject = null;
+        peerData.audioEl.remove();
+      }
+      if (peerData.audioNode) {
+        peerData.audioNode.disconnect();
+      }
     } catch (e) {}
     this.peers.delete(socketId);
   }

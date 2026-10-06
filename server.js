@@ -117,6 +117,32 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   });
 });
 
+// Dynamic TURN configuration route
+app.get('/api/turn-servers', async (req, res) => {
+  const appName = process.env.METERED_APP_NAME;
+  const apiKey = process.env.METERED_API_KEY;
+
+  if (appName && apiKey) {
+    try {
+      const response = await fetch(`https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`);
+      if (response.ok) {
+        const iceServers = await response.json();
+        return res.json(iceServers);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch from Metered:', e);
+    }
+  }
+
+  // Fallback Google & Cloudflare STUN servers
+  res.json([
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ]);
+});
+
 // App info endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', name: 'CordLite', version: '1.0.0' });
