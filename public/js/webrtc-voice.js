@@ -18,6 +18,10 @@ class WebRTCVoiceManager {
     this.lastSpeakingState = false;
     this.silenceHoldFrames = 0;
 
+    // Local mute and volume control for peers (Discord style)
+    this.peerVolumes = new Map(); // (socketId/userId) -> volume (0.0 to 1.5)
+    this.locallyMutedUsers = new Set(); // Set of socketIds/userIds muted locally
+
     // socketId -> { socketId, userId, name, avatarColor, isSpeaking, isMuted, isDeafened, speakingTimeout }
     this.peers = new Map();
     // socketId -> next scheduled playback time
@@ -25,6 +29,53 @@ class WebRTCVoiceManager {
 
     this.onPeersUpdateCallback = null;
     this.setupSocketEvents();
+  }
+
+  isPeerLocallyMuted(socketId, userId) {
+    if (socketId && this.locallyMutedUsers.has(socketId)) return true;
+    if (userId && this.locallyMutedUsers.has(userId)) return true;
+    return false;
+  }
+
+  getPeerVolume(socketId, userId) {
+    if (this.isPeerLocallyMuted(socketId, userId)) return 0;
+    if (userId && this.peerVolumes.has(userId)) return this.peerVolumes.get(userId);
+    if (socketId && this.peerVolumes.has(socketId)) return this.peerVolumes.get(socketId);
+    return 1.0;
+  }
+
+  setPeerVolume(socketId, userId, volume) {
+    const vol = Math.max(0, Math.min(1.5, volume));
+    if (socketId) this.peerVolumes.set(socketId, vol);
+    if (userId) this.peerVolumes.set(userId, vol);
+    if (vol <= 0.01) {
+      if (socketId) this.locallyMutedUsers.add(socketId);
+      if (userId) this.locallyMutedUsers.add(userId);
+    } else {
+      if (socketId) this.locallyMutedUsers.delete(socketId);
+      if (userId) this.locallyMutedUsers.delete(userId);
+    }
+    this.notifyPeersUpdate();
+  }
+
+  toggleMutePeer(socketId, userId) {
+    const isMuted = this.isPeerLocallyMuted(socketId, userId);
+    if (isMuted) {
+      if (socketId) this.locallyMutedUsers.delete(socketId);
+      if (userId) this.locallyMutedUsers.delete(userId);
+      const curr = this.getPeerVolume(socketId, userId);
+      if (curr <= 0.01) {
+        if (socketId) this.peerVolumes.set(socketId, 1.0);
+        if (userId) this.peerVolumes.set(userId, 1.0);
+      }
+      this.notifyPeersUpdate();
+      return false; // now unmuted
+    } else {
+      if (socketId) this.locallyMutedUsers.add(socketId);
+      if (userId) this.locallyMutedUsers.add(userId);
+      this.notifyPeersUpdate();
+      return true; // now muted
+    }
   }
 
   getAudioContext() {
@@ -80,6 +131,7 @@ class WebRTCVoiceManager {
       if (this.isDeafened) return;
       if (fromSocketId === this.socket.id) return;
       if (this.user && fromUser && fromUser.userId === this.user.userId) return;
+      if (this.isPeerLocallyMuted(fromSocketId, fromUser ? fromUser.userId : null)) return;
 
       let peer = this.peers.get(fromSocketId);
       if (!peer) {
@@ -105,7 +157,7 @@ class WebRTCVoiceManager {
       this.notifyPeersUpdate();
 
       // Play audio through Web Audio buffer queue
-      this.playAudioChunk(fromSocketId, audioData, sampleRate);
+      this.playAudioChunk(fromSocketId, audioData, sampleRate, fromUser);
     });
 
     // Speaking indicator event
@@ -146,8 +198,11 @@ class WebRTCVoiceManager {
   }
 
   // Smooth jitter-buffered Web Audio playback
-  playAudioChunk(socketId, buffer, sampleRate) {
+  playAudioChunk(socketId, buffer, sampleRate, fromUser = null) {
     try {
+      const volume = this.getPeerVolume(socketId, fromUser ? fromUser.userId : null);
+      if (volume <= 0.001) return; // Muted locally, drop audio chunk
+
       const ctx = this.getAudioContext();
       if (!ctx) return;
 
@@ -164,7 +219,7 @@ class WebRTCVoiceManager {
       source.buffer = audioBuffer;
 
       const gain = ctx.createGain();
-      gain.gain.value = 1.0;
+      gain.gain.value = volume;
       source.connect(gain);
       gain.connect(ctx.destination);
 
@@ -333,7 +388,9 @@ class WebRTCVoiceManager {
         avatarColor: p.avatarColor,
         isSpeaking: p.isSpeaking,
         isMuted: p.isMuted,
-        isDeafened: p.isDeafened
+        isDeafened: p.isDeafened,
+        isLocallyMuted: this.isPeerLocallyMuted(p.socketId, p.userId),
+        volume: this.getPeerVolume(p.socketId, p.userId)
       }));
       this.onPeersUpdateCallback(peerList);
     }

@@ -424,18 +424,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Peer Tiles
     for (const [_, peer] of voiceManager.peers.entries()) {
+      const isLocallyMuted = voiceManager.isPeerLocallyMuted(peer.socketId, peer.userId);
+      const peerVol = Math.round(voiceManager.getPeerVolume(peer.socketId, peer.userId) * 100);
       const tile = document.createElement('div');
-      tile.className = `voice-tile ${peer.isSpeaking && !peer.isMuted ? 'speaking' : ''}`;
+      tile.className = `voice-tile ${peer.isSpeaking && !peer.isMuted && !isLocallyMuted ? 'speaking' : ''} ${isLocallyMuted ? 'locally-muted' : ''}`;
       tile.innerHTML = `
         <div class="voice-tile-avatar" style="background-color: ${peer.avatarColor}">
           ${peer.name.charAt(0).toUpperCase()}
+          ${isLocallyMuted ? '<span class="avatar-mute-badge" title="Muted for you">🔇</span>' : ''}
         </div>
+
+        <!-- Quick Mute & Volume Control -->
+        <div class="voice-tile-actions">
+          <button class="btn-peer-mute ${isLocallyMuted ? 'active-muted' : ''}" title="${isLocallyMuted ? 'Unmute this user' : 'Mute this user for you'}">
+            ${isLocallyMuted ? '🔇 Unmute' : '🔊 Mute'}
+          </button>
+          <div class="peer-vol-wrap">
+            <span class="vol-label">${isLocallyMuted ? '0%' : peerVol + '%'}</span>
+            <input type="range" class="peer-vol-slider" min="0" max="150" value="${isLocallyMuted ? 0 : peerVol}" title="Adjust user volume">
+          </div>
+        </div>
+
         <div class="voice-tile-name-tag">
           <span>${escapeHtml(peer.name)}</span>
-          ${peer.isMuted ? '<span class="tile-icon-muted">🔇</span>' : ''}
-          ${peer.isDeafened ? '<span class="tile-icon-muted">🎧</span>' : ''}
+          ${isLocallyMuted ? '<span class="tile-icon-local-muted" title="You muted this user">🔇 Muted</span>' : ''}
+          ${peer.isMuted ? '<span class="tile-icon-muted" title="Mic muted">🔇</span>' : ''}
+          ${peer.isDeafened ? '<span class="tile-icon-muted" title="Deafened">🎧</span>' : ''}
         </div>
       `;
+
+      // Controls
+      const btnMute = tile.querySelector('.btn-peer-mute');
+      const volSlider = tile.querySelector('.peer-vol-slider');
+      const volLabel = tile.querySelector('.vol-label');
+
+      btnMute.onclick = (e) => {
+        e.stopPropagation();
+        const nowMuted = voiceManager.toggleMutePeer(peer.socketId, peer.userId);
+        showToast(nowMuted ? `Muted ${peer.name} for you` : `Unmuted ${peer.name}`);
+        renderVoiceStage();
+        renderMembers();
+      };
+
+      volSlider.oninput = (e) => {
+        const val = parseInt(e.target.value, 10);
+        voiceManager.setPeerVolume(peer.socketId, peer.userId, val / 100);
+        volLabel.textContent = val + '%';
+        if (val === 0) {
+          btnMute.classList.add('active-muted');
+          btnMute.textContent = '🔇 Unmute';
+        } else {
+          btnMute.classList.remove('active-muted');
+          btnMute.textContent = '🔊 Mute';
+        }
+      };
+
       voiceGrid.appendChild(tile);
     }
   }
@@ -587,6 +630,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     serverMembers.forEach(m => {
       const isMe = m.userId === user.userId;
+      const isLocallyMuted = !isMe && voiceManager.isPeerLocallyMuted(m.socketId, m.userId);
+      const isInSameVoice = !isMe && activeVoiceChannel && m.voiceChannelId === activeVoiceChannel.id;
       const item = document.createElement('div');
       item.className = 'member-item';
       item.innerHTML = `
@@ -598,7 +643,26 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="member-name">${escapeHtml(m.name)}${isMe ? ' (You)' : ''}</span>
           ${m.voiceChannelId ? '<span class="member-status" style="color: var(--green);">🔊 In Voice</span>' : '<span class="member-status">Online</span>'}
         </div>
+        ${isInSameVoice ? `
+          <button class="btn-member-mute ${isLocallyMuted ? 'active-muted' : ''}" title="${isLocallyMuted ? 'Unmute user' : 'Mute user for you'}">
+            ${isLocallyMuted ? '🔇' : '🔊'}
+          </button>
+        ` : ''}
       `;
+
+      if (isInSameVoice) {
+        const btnMute = item.querySelector('.btn-member-mute');
+        if (btnMute) {
+          btnMute.onclick = (e) => {
+            e.stopPropagation();
+            const nowMuted = voiceManager.toggleMutePeer(m.socketId, m.userId);
+            showToast(nowMuted ? `Muted ${m.name} for you` : `Unmuted ${m.name}`);
+            renderVoiceStage();
+            renderMembers();
+          };
+        }
+      }
+
       membersSidebar.appendChild(item);
     });
 
