@@ -812,6 +812,15 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         `;
       }).join('');
+
+      listEl.querySelectorAll('.voice-occupant-item').forEach(item => {
+        const userId = item.dataset.userId;
+        const occ = occupants.find(o => o.userId === userId);
+        if (occ) {
+          item.oncontextmenu = (e) => showUserContextMenu(e, occ);
+          item.onclick = (e) => showUserContextMenu(e, occ);
+        }
+      });
     }
   }
 

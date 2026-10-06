@@ -10,10 +10,10 @@ async function runTests() {
   const assets = [
     'http://localhost:3000/',
     'http://localhost:3000/css/style.css',
-    'http://localhost:3000/js/icons.js?v=7',
-    'http://localhost:3000/js/audio-manager.js?v=7',
-    'http://localhost:3000/js/webrtc-voice.js?v=7',
-    'http://localhost:3000/js/app.js?v=7'
+    'http://localhost:3000/js/icons.js?v=8',
+    'http://localhost:3000/js/audio-manager.js?v=8',
+    'http://localhost:3000/js/webrtc-voice.js?v=8',
+    'http://localhost:3000/js/app.js?v=8'
   ];
 
   for (const asset of assets) {
@@ -63,9 +63,13 @@ async function runTests() {
     serverId: 'friends-hangout'
   });
 
+  await new Promise(r => setTimeout(r, 200));
+
   // Test Join Voice Channel
   client1.emit('voice:join', { serverId: 'friends-hangout', channelId: 'v-general' });
   client2.emit('voice:join', { serverId: 'friends-hangout', channelId: 'v-general' });
+
+  await new Promise(r => setTimeout(r, 200));
 
   // Test Feature 1: Video State Broadcast
   await new Promise((resolve) => {
