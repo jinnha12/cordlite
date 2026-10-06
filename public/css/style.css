@@ -1929,3 +1929,169 @@ body {
   font-size: 11px;
 }
 
+/* ========================================================
+   Dual-Engine Live Screen Watching & Standby UI
+   ======================================================== */
+.stream-tile-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #0b0e14;
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.stream-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.stream-top-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stream-owner-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.occupant-live-badge {
+  background-color: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(237, 66, 69, 0.4);
+}
+
+.btn-fullscreen-stream {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-fullscreen-stream:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.stream-media-wrap {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #05070a;
+}
+
+.peer-stream-video, .peer-stream-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stream-standby-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, rgba(30, 31, 34, 0.92) 0%, rgba(18, 19, 22, 0.98) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+}
+
+.standby-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.standby-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.standby-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-normal);
+  text-align: center;
+}
+
+.btn-watch-stream {
+  background-color: var(--blurple);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 22px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);
+}
+
+.btn-watch-stream:hover {
+  background-color: var(--blurple-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(88, 101, 242, 0.5);
+}
+
+.live-stream-ctx-item {
+  color: var(--red) !important;
+}
+
+.live-stream-ctx-item:hover {
+  background-color: rgba(237, 66, 69, 0.15) !important;
+  color: #fff !important;
+}
+

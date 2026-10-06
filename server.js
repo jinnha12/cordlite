@@ -464,6 +464,29 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Feature 1: Request live stream from peer (when user clicks 'Watch Stream')
+  socket.on('voice:request_stream', ({ toSocketId }) => {
+    const sender = activeUsers.get(socket.id);
+    if (!sender) return;
+    io.to(toSocketId).emit('voice:request_stream', {
+      fromSocketId: socket.id,
+      fromUserId: sender.userId,
+      fromName: sender.name
+    });
+  });
+
+  // Feature 1: Dual-Engine Live Screen Frame Relay (Zero-Config Firewall-Piercing fallback)
+  socket.on('voice:screen_frame', ({ channelId, frameData }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || user.voiceChannelId !== channelId) return;
+
+    socket.to(`voice:${channelId}`).emit('voice:screen_frame', {
+      fromSocketId: socket.id,
+      fromUserId: user.userId,
+      frameData
+    });
+  });
+
   // Feature 4: Voice Soundboard Playback
   socket.on('voice:soundboard', ({ channelId, soundId }) => {
     const user = activeUsers.get(socket.id);

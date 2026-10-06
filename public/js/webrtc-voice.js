@@ -43,7 +43,15 @@ class WebRTCVoiceManager {
     this.onPeersUpdateCallback = null;
     this.onLocalSpeaking = null;
     this.onPeerVideoUpdate = null;
+    this.onPeerScreenFrame = null;
     this.onSoundboardPlayed = null;
+
+    // Dual-Engine Fallback for Screen Sharing
+    this.peerScreenFrames = new Map(); // socketId -> frame data URL
+    this.pendingIceCandidates = new Map(); // socketId -> [candidates]
+    this.screenFrameInterval = null;
+    this.screenCaptureVideo = null;
+    this.screenCaptureCanvas = null;
 
     this.setupSocketEvents();
   }
@@ -226,12 +234,19 @@ class WebRTCVoiceManager {
       }
     });
 
-    // WebRTC Video Signaling (Offer / Answer / ICE Candidates)
+    // WebRTC Video Signaling (Offer / Answer / ICE Candidates) with Candidate Queuing
     this.socket.on('voice:video_signal', async ({ fromSocketId, signal }) => {
       try {
         const pc = this.getOrCreatePeerConnection(fromSocketId);
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          // Drain any queued ICE candidates for this peer
+          const pending = this.pendingIceCandidates.get(fromSocketId) || [];
+          for (const cand of pending) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+          }
+          this.pendingIceCandidates.delete(fromSocketId);
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           this.socket.emit('voice:video_signal', {
@@ -240,11 +255,40 @@ class WebRTCVoiceManager {
           });
         } else if (signal.type === 'answer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          // Drain any queued ICE candidates for this peer
+          const pending = this.pendingIceCandidates.get(fromSocketId) || [];
+          for (const cand of pending) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+          }
+          this.pendingIceCandidates.delete(fromSocketId);
         } else if (signal.type === 'candidate' && signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          } else {
+            // Queue candidate until remote description is set
+            if (!this.pendingIceCandidates.has(fromSocketId)) {
+              this.pendingIceCandidates.set(fromSocketId, []);
+            }
+            this.pendingIceCandidates.get(fromSocketId).push(signal.candidate);
+          }
         }
       } catch (err) {
         console.warn('WebRTC video signal error:', err);
+      }
+    });
+
+    // Feature 1: Peer requested live stream (e.g. clicked "Watch Stream")
+    this.socket.on('voice:request_stream', async ({ fromSocketId }) => {
+      if ((this.isScreenSharing && this.localScreenStream) || (this.isCameraOn && this.localCameraStream)) {
+        await this.initiateVideoOfferTo(fromSocketId);
+      }
+    });
+
+    // Feature 1: Dual-Engine WebSocket screen frame relay fallback
+    this.socket.on('voice:screen_frame', ({ fromSocketId, frameData }) => {
+      this.peerScreenFrames.set(fromSocketId, frameData);
+      if (this.onPeerScreenFrame) {
+        this.onPeerScreenFrame(fromSocketId, frameData);
       }
     });
 
@@ -609,6 +653,7 @@ class WebRTCVoiceManager {
       };
 
       await this.broadcastVideoTrackToPeers(this.localScreenStream);
+      this.startScreenFrameBroadcast();
       this.socket.emit('voice:video_state', {
         channelId: this.currentChannelId,
         isCameraOn: false,
@@ -622,7 +667,63 @@ class WebRTCVoiceManager {
     }
   }
 
+  requestStreamFromPeer(peerSocketId) {
+    this.socket.emit('voice:request_stream', { toSocketId: peerSocketId });
+  }
+
+  startScreenFrameBroadcast() {
+    this.stopScreenFrameBroadcast();
+    try {
+      if (!this.screenCaptureCanvas) {
+        this.screenCaptureCanvas = document.createElement('canvas');
+      }
+      if (!this.screenCaptureVideo) {
+        this.screenCaptureVideo = document.createElement('video');
+        this.screenCaptureVideo.muted = true;
+        this.screenCaptureVideo.playsInline = true;
+      }
+      this.screenCaptureVideo.srcObject = this.localScreenStream;
+      this.screenCaptureVideo.play().catch(() => {});
+
+      const canvas = this.screenCaptureCanvas;
+      const ctx = canvas.getContext('2d');
+      const video = this.screenCaptureVideo;
+
+      this.screenFrameInterval = setInterval(() => {
+        if (!this.isScreenSharing || !this.currentChannelId || !this.localScreenStream) {
+          this.stopScreenFrameBroadcast();
+          return;
+        }
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          const maxDim = 1280;
+          const scale = Math.min(1, maxDim / Math.max(video.videoWidth, video.videoHeight));
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frameData = canvas.toDataURL('image/jpeg', 0.65);
+          this.socket.emit('voice:screen_frame', {
+            channelId: this.currentChannelId,
+            frameData
+          });
+        }
+      }, 120);
+    } catch (err) {
+      console.warn('startScreenFrameBroadcast error:', err);
+    }
+  }
+
+  stopScreenFrameBroadcast() {
+    if (this.screenFrameInterval) {
+      clearInterval(this.screenFrameInterval);
+      this.screenFrameInterval = null;
+    }
+    if (this.screenCaptureVideo) {
+      try { this.screenCaptureVideo.srcObject = null; } catch (e) {}
+    }
+  }
+
   stopScreenShare() {
+    this.stopScreenFrameBroadcast();
     if (this.localScreenStream) {
       this.localScreenStream.getTracks().forEach(t => t.stop());
       this.localScreenStream = null;

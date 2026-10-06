@@ -165,6 +165,16 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     } else {
       itemsHtml = `
+        ${targetUser.isScreenSharing ? `
+          <div class="ctx-item live-stream-ctx-item" id="ctx-action-watch-stream">
+            <div class="ctx-item-left">
+              <span style="color: var(--red);">${window.ICONS.screenShare}</span>
+              <span><strong>Watch Live Stream</strong></span>
+            </div>
+            <span class="occupant-live-badge">LIVE</span>
+          </div>
+          <div class="ctx-divider"></div>
+        ` : ''}
         <div class="ctx-item" id="ctx-action-mention">
           <div class="ctx-item-left"><span>${window.ICONS.chat}</span><span>Mention (@${escapeHtml(targetUser.name)})</span></div>
         </div>
@@ -211,6 +221,24 @@ document.addEventListener('DOMContentLoaded', () => {
     contextMenu.style.top = `${Math.max(10, posY)}px`;
 
     // Wire Context Menu Click Actions
+    const watchStreamBtn = document.getElementById('ctx-action-watch-stream');
+    if (watchStreamBtn) {
+      watchStreamBtn.onclick = async () => {
+        closeContextMenu();
+        if (targetUser.voiceChannelId && (!activeVoiceChannel || activeVoiceChannel.id !== targetUser.voiceChannelId)) {
+          if (currentServer) {
+            const ch = currentServer.channels.find(c => c.id === targetUser.voiceChannelId);
+            if (ch) await selectChannel(ch.id);
+          }
+        }
+        if (targetUser.socketId) {
+          voiceManager.requestStreamFromPeer(targetUser.socketId);
+        }
+        showToast(`Watching ${targetUser.name}'s stream`);
+        renderVoiceStage();
+      };
+    }
+
     const editProfileBtn = document.getElementById('ctx-action-edit-profile');
     if (editProfileBtn) {
       editProfileBtn.onclick = () => {
@@ -304,9 +332,51 @@ document.addEventListener('DOMContentLoaded', () => {
     renderVoiceChannelsOccupancy();
   });
 
-  // Feature 1: Video stream attach callback
-  voiceManager.onPeerVideoUpdate = () => {
+  // Feature 1: Video stream attach callback (High-FPS WebRTC P2P)
+  voiceManager.onPeerVideoUpdate = (socketId, stream) => {
+    const tile = document.querySelector(`.voice-tile[data-socket-id="${socketId}"]`);
+    if (tile) {
+      const vid = tile.querySelector('.peer-stream-video');
+      const canvas = tile.querySelector('.peer-stream-canvas');
+      const overlay = tile.querySelector('.stream-standby-overlay');
+      if (vid) {
+        vid.srcObject = stream;
+        vid.style.display = 'block';
+        vid.play().catch(() => {});
+        if (canvas) canvas.style.display = 'none';
+        if (overlay) overlay.style.display = 'none';
+        return;
+      }
+    }
     renderVoiceStage();
+  };
+
+  // Feature 1: Dual-Engine WebSocket Frame Relay (Firewall-Piercing Fallback)
+  voiceManager.onPeerScreenFrame = (socketId, frameData) => {
+    const tile = document.querySelector(`.voice-tile[data-socket-id="${socketId}"]`);
+    if (!tile) {
+      renderVoiceStage();
+      return;
+    }
+    const canvas = tile.querySelector('.peer-stream-canvas');
+    const vid = tile.querySelector('.peer-stream-video');
+    const overlay = tile.querySelector('.stream-standby-overlay');
+    // If WebRTC video is already playing, prefer it
+    if (vid && vid.srcObject && vid.srcObject.active) return;
+
+    if (canvas) {
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        canvas.style.display = 'block';
+        if (vid) vid.style.display = 'none';
+        if (overlay) overlay.style.display = 'none';
+      };
+      img.src = frameData;
+    }
   };
 
   // Feature 4: Soundboard playback announcement
@@ -633,10 +703,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let myAvatarOrVideoHtml = '';
     if (isMyScreenSharing) {
       myAvatarOrVideoHtml = `
-        <div class="voice-tile-video-wrap">
-          <video id="my-screen-video" autoplay muted playsinline></video>
+        <div class="stream-tile-container">
+          <div class="stream-top-bar">
+            <div class="stream-top-left">
+              <span class="occupant-live-badge">${window.ICONS.screenShare} LIVE</span>
+              <span class="stream-owner-name">Your Live Screen</span>
+            </div>
+            <div class="stream-top-actions">
+              <button class="btn-fullscreen-stream" id="btn-fullscreen-my-stream" title="Toggle Fullscreen">
+                ${window.ICONS.fullscreen}
+              </button>
+            </div>
+          </div>
+          <div class="stream-media-wrap">
+            <video id="my-screen-video" autoplay muted playsinline></video>
+          </div>
         </div>
-        <span class="live-stream-badge">${window.ICONS.screenShare} Live Screen</span>
       `;
     } else if (isMyCameraOn) {
       myAvatarOrVideoHtml = `
@@ -677,6 +759,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isMyScreenSharing) {
       const vid = myTile.querySelector('#my-screen-video');
       if (vid) vid.srcObject = voiceManager.localScreenStream;
+      const fsBtn = myTile.querySelector('#btn-fullscreen-my-stream');
+      if (fsBtn) {
+        fsBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (!document.fullscreenElement) {
+            myTile.requestFullscreen().catch(() => {});
+          } else {
+            document.exitFullscreen().catch(() => {});
+          }
+        };
+      }
     } else if (isMyCameraOn) {
       const vid = myTile.querySelector('#my-camera-video');
       if (vid) vid.srcObject = voiceManager.localCameraStream;
@@ -687,37 +780,65 @@ document.addEventListener('DOMContentLoaded', () => {
       const isLocallyMuted = voiceManager.isPeerLocallyMuted(peer.socketId, peer.userId);
       const peerVol = Math.round(voiceManager.getPeerVolume(peer.socketId, peer.userId) * 100);
       const tile = document.createElement('div');
+      tile.dataset.socketId = peer.socketId;
 
-      const isPeerScreenSharing = peer.isScreenSharing && peer.videoStream;
-      const isPeerCameraOn = peer.isCameraOn && peer.videoStream;
+      const isPeerScreenSharing = !!peer.isScreenSharing;
+      const isPeerCameraOn = !!peer.isCameraOn;
+      const peerStream = peer.videoStream || voiceManager.peerVideoStreams.get(peer.socketId);
+      const cachedFrame = voiceManager.peerScreenFrames.get(peer.socketId);
+      const hasActiveStream = !!(peerStream || cachedFrame);
 
       tile.className = `voice-tile ${peer.isSpeaking && !peer.isMuted && !isLocallyMuted ? 'speaking' : ''} ${isLocallyMuted ? 'locally-muted' : ''} ${isPeerScreenSharing ? 'screen-sharing' : ''}`;
 
-      let peerAvatarOrVideoHtml = '';
+      let peerMediaHtml = '';
       if (isPeerScreenSharing) {
-        peerAvatarOrVideoHtml = `
-          <div class="voice-tile-video-wrap">
-            <video class="peer-stream-video" autoplay playsinline></video>
+        peerMediaHtml = `
+          <div class="stream-tile-container">
+            <div class="stream-top-bar">
+              <div class="stream-top-left">
+                <span class="occupant-live-badge">${window.ICONS.screenShare} LIVE</span>
+                <span class="stream-owner-name">${escapeHtml(peer.name)}'s Stream</span>
+              </div>
+              <div class="stream-top-actions">
+                <button class="btn-fullscreen-stream" title="Toggle Fullscreen">
+                  ${window.ICONS.fullscreen}
+                </button>
+              </div>
+            </div>
+
+            <div class="stream-media-wrap">
+              <video class="peer-stream-video" autoplay playsinline muted style="${peerStream ? 'display: block;' : 'display: none;'}"></video>
+              <canvas class="peer-stream-canvas" style="${!peerStream && cachedFrame ? 'display: block;' : 'display: none;'}"></canvas>
+
+              <div class="stream-standby-overlay" style="${hasActiveStream ? 'display: none;' : 'display: flex;'}">
+                <div class="standby-avatar" style="background-color: ${peer.avatarColor}">
+                  ${peer.avatarUrl ? `<img src="${peer.avatarUrl}" alt="${escapeHtml(peer.name)}" />` : escapeHtml(peer.name.charAt(0).toUpperCase())}
+                </div>
+                <div class="standby-title">${escapeHtml(peer.name)} is streaming</div>
+                <button class="btn-watch-stream" data-socket-id="${peer.socketId}">
+                  ${window.ICONS.screenShare} Watch Stream
+                </button>
+              </div>
+            </div>
           </div>
-          <span class="live-stream-badge">${window.ICONS.screenShare} Live Screen</span>
         `;
       } else if (isPeerCameraOn) {
-        peerAvatarOrVideoHtml = `
+        peerMediaHtml = `
           <div class="voice-tile-video-wrap">
-            <video class="peer-stream-video" autoplay playsinline></video>
+            <video class="peer-stream-video" autoplay playsinline muted></video>
           </div>
           <span class="live-stream-badge">${window.ICONS.camera} Camera</span>
         `;
       } else {
         if (peer.avatarUrl) {
-          peerAvatarOrVideoHtml = `
+          peerMediaHtml = `
             <div class="voice-tile-avatar">
               <img src="${peer.avatarUrl}" alt="${escapeHtml(peer.name)}" />
               ${isLocallyMuted ? `<span class="avatar-mute-badge" title="Muted for you">${window.ICONS.speakerMuted}</span>` : ''}
             </div>
           `;
         } else {
-          peerAvatarOrVideoHtml = `
+          peerMediaHtml = `
             <div class="voice-tile-avatar" style="background-color: ${peer.avatarColor}">
               ${escapeHtml(peer.name.charAt(0).toUpperCase())}
               ${isLocallyMuted ? `<span class="avatar-mute-badge" title="Muted for you">${window.ICONS.speakerMuted}</span>` : ''}
@@ -727,7 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       tile.innerHTML = `
-        ${peerAvatarOrVideoHtml}
+        ${peerMediaHtml}
 
         <!-- Quick Mute & Volume Control -->
         <div class="voice-tile-actions">
@@ -749,12 +870,57 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       // Attach peer stream to video
-      if ((isPeerScreenSharing || isPeerCameraOn) && peer.videoStream) {
+      if (peerStream) {
         const vid = tile.querySelector('.peer-stream-video');
-        if (vid) vid.srcObject = peer.videoStream;
+        if (vid) {
+          vid.srcObject = peerStream;
+          vid.play().catch(() => {});
+        }
+      } else if (!peerStream && cachedFrame) {
+        const canvas = tile.querySelector('.peer-stream-canvas');
+        if (canvas) {
+          const img = new Image();
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+          };
+          img.src = cachedFrame;
+        }
       }
 
-      // Controls
+      // Live stream controls
+      if (isPeerScreenSharing) {
+        const btnWatch = tile.querySelector('.btn-watch-stream');
+        if (btnWatch) {
+          btnWatch.onclick = (e) => {
+            e.stopPropagation();
+            voiceManager.requestStreamFromPeer(peer.socketId);
+            btnWatch.innerHTML = `${window.ICONS.screenShare} Connecting...`;
+            showToast(`Connecting to ${peer.name}'s stream...`);
+          };
+        }
+
+        const btnFs = tile.querySelector('.btn-fullscreen-stream');
+        if (btnFs) {
+          btnFs.onclick = (e) => {
+            e.stopPropagation();
+            if (!document.fullscreenElement) {
+              tile.requestFullscreen().catch(() => {});
+            } else {
+              document.exitFullscreen().catch(() => {});
+            }
+          };
+        }
+
+        // Proactively request stream once if we don't have it yet
+        if (!hasActiveStream) {
+          voiceManager.requestStreamFromPeer(peer.socketId);
+        }
+      }
+
+      // Volume & Mute Controls
       const btnMute = tile.querySelector('.btn-peer-mute');
       const volSlider = tile.querySelector('.peer-vol-slider');
       const volLabel = tile.querySelector('.vol-label');
@@ -808,7 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
               ${avatarInner}
             </div>
             <span class="occupant-name">${escapeHtml(occ.name)}</span>
-            ${occ.isScreenSharing ? `<span style="color: var(--blurple); display: flex;" title="Sharing Screen">${window.ICONS.screenShare}</span>` : ''}
+            ${occ.isScreenSharing ? `<span class="occupant-live-badge" title="${escapeHtml(occ.name)} is Live">${window.ICONS.screenShare} LIVE</span>` : ''}
           </div>
         `;
       }).join('');
@@ -818,7 +984,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const occ = occupants.find(o => o.userId === userId);
         if (occ) {
           item.oncontextmenu = (e) => showUserContextMenu(e, occ);
-          item.onclick = (e) => showUserContextMenu(e, occ);
+          item.onclick = async (e) => {
+            if (occ.isScreenSharing) {
+              if (!activeVoiceChannel || activeVoiceChannel.id !== channelId) {
+                if (currentServer) {
+                  const ch = currentServer.channels.find(c => c.id === channelId);
+                  if (ch) await selectChannel(ch.id);
+                }
+              }
+              if (occ.socketId) {
+                voiceManager.requestStreamFromPeer(occ.socketId);
+              }
+              showToast(`Watching ${occ.name}'s stream`);
+              renderVoiceStage();
+            } else {
+              showUserContextMenu(e, occ);
+            }
+          };
         }
       });
     }

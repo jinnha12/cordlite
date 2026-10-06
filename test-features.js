@@ -10,10 +10,10 @@ async function runTests() {
   const assets = [
     'http://localhost:3000/',
     'http://localhost:3000/css/style.css',
-    'http://localhost:3000/js/icons.js?v=8',
-    'http://localhost:3000/js/audio-manager.js?v=8',
-    'http://localhost:3000/js/webrtc-voice.js?v=8',
-    'http://localhost:3000/js/app.js?v=8'
+    'http://localhost:3000/js/icons.js?v=9',
+    'http://localhost:3000/js/audio-manager.js?v=9',
+    'http://localhost:3000/js/webrtc-voice.js?v=9',
+    'http://localhost:3000/js/app.js?v=9'
   ];
 
   for (const asset of assets) {
@@ -74,15 +74,42 @@ async function runTests() {
   // Test Feature 1: Video State Broadcast
   await new Promise((resolve) => {
     client2.on('voice:video_state', (data) => {
-      if (data.userId === 'test-user-1' && data.isCameraOn === true) {
-        console.log('[PASS] Feature 1: Video camera state successfully broadcast to peer!');
+      if (data.userId === 'test-user-1' && data.isScreenSharing === true) {
+        console.log('[PASS] Feature 1: Screen sharing state successfully broadcast to peer!');
         resolve();
       }
     });
     client1.emit('voice:video_state', {
       channelId: 'v-general',
-      isCameraOn: true,
-      isScreenSharing: false
+      isCameraOn: false,
+      isScreenSharing: true
+    });
+  });
+
+  // Test Feature 1: Stream Request Negotiation
+  await new Promise((resolve) => {
+    client1.on('voice:request_stream', (data) => {
+      if (data.fromUserId === 'test-user-2') {
+        console.log(`[PASS] Feature 1: Peer stream request received from ${data.fromName}!`);
+        resolve();
+      }
+    });
+    client2.emit('voice:request_stream', {
+      toSocketId: client1.id
+    });
+  });
+
+  // Test Feature 1: Live Screen WebSocket Frame Relay (Dual-Engine Fallback)
+  await new Promise((resolve) => {
+    client2.on('voice:screen_frame', (data) => {
+      if (data.fromUserId === 'test-user-1' && data.frameData === 'data:image/jpeg;base64,testframe') {
+        console.log('[PASS] Feature 1: Live screen frame relay successfully received by peer!');
+        resolve();
+      }
+    });
+    client1.emit('voice:screen_frame', {
+      channelId: 'v-general',
+      frameData: 'data:image/jpeg;base64,testframe'
     });
   });
 
@@ -135,7 +162,7 @@ async function runTests() {
   client2.disconnect();
 
   if (failures === 0) {
-    console.log('\n*** ALL 5 FEATURES VERIFIED SUCCESSFULLY! ***\n');
+    console.log('\n*** ALL LIVE STREAMING & SOCIAL FEATURES VERIFIED SUCCESSFULLY! ***\n');
     process.exit(0);
   } else {
     console.error(`\nTest suite finished with ${failures} failures.\n`);
