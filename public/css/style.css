@@ -790,27 +790,115 @@ body {
 
 /* 4. Voice Stage Screen (When viewing/joined a voice channel) */
 #voice-stage {
-  flex: 1;
+  flex: 1 1 0%;
   display: none;
   flex-direction: column;
   background-color: #111214;
   position: relative;
   overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
 }
 
 #voice-stage.active {
   display: flex;
 }
 
+/* Fluid Responsive Focused Live Screen Stage Area */
+.stage-stream-focus {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 12px 16px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Voice Grid - Dynamic Auto-fit for voice chats */
 .voice-grid {
-  flex: 1;
-  padding: 24px;
+  flex: 1 1 0%;
+  padding: 20px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  grid-auto-rows: minmax(170px, 1fr);
+  gap: 16px;
   align-content: center;
   justify-content: center;
   overflow-y: auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Voice Grid in Filmstrip Mode (when a live screen share is active) */
+.voice-grid.filmstrip {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 96px;
+  min-height: 96px;
+  max-height: 96px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: rgba(17, 18, 20, 0.7);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.voice-grid.filmstrip::-webkit-scrollbar {
+  height: 5px;
+}
+
+.voice-grid.filmstrip .voice-tile {
+  width: 136px;
+  min-width: 136px;
+  height: 78px;
+  min-height: 78px;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  border: 2px solid transparent;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.voice-grid.filmstrip .voice-tile.speaking {
+  border-color: var(--green-speaking);
+}
+
+.voice-grid.filmstrip .voice-tile-avatar {
+  width: 42px;
+  height: 42px;
+  font-size: 18px;
+}
+
+.voice-grid.filmstrip .voice-tile-name-tag {
+  bottom: 4px;
+  left: 6px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-grid.filmstrip .voice-tile-actions {
+  display: none !important;
 }
 
 .voice-tile {
@@ -1381,6 +1469,48 @@ body {
   .top-bar-desc {
     display: none;
   }
+  .stage-stream-focus {
+    padding: 6px 8px;
+  }
+  .stream-top-bar {
+    height: 40px;
+    padding: 0 10px;
+  }
+  .stream-owner-name {
+    font-size: 11px;
+  }
+  .voice-stage-controls {
+    height: 54px;
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .stage-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 15px;
+  }
+  .stage-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  .voice-grid.filmstrip {
+    height: 76px;
+    min-height: 76px;
+    max-height: 76px;
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .voice-grid.filmstrip .voice-tile {
+    width: 110px;
+    min-width: 110px;
+    height: 68px;
+    min-height: 68px;
+  }
+  .voice-grid.filmstrip .voice-tile-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
 }
 
 /* Discord User Context Menu */
@@ -1935,12 +2065,16 @@ body {
 .stream-tile-container {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background-color: #0b0e14;
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .stream-top-bar {
@@ -1949,13 +2083,14 @@ body {
   left: 0;
   right: 0;
   height: 48px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0) 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
   z-index: 10;
   pointer-events: auto;
+  transition: opacity 0.25s ease;
 }
 
 .stream-top-left {
@@ -1969,6 +2104,16 @@ body {
   font-weight: 700;
   color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.stream-res-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-header);
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
 }
 
 .occupant-live-badge {
@@ -1986,12 +2131,19 @@ body {
   box-shadow: 0 2px 6px rgba(237, 66, 69, 0.4);
 }
 
+.stream-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-theater-stream,
 .btn-fullscreen-stream {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   color: #fff;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -2000,25 +2152,96 @@ body {
   transition: all var(--transition-fast);
 }
 
+.btn-theater-stream:hover,
 .btn-fullscreen-stream:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
   transform: scale(1.05);
 }
 
 .stream-media-wrap {
+  flex: 1 1 0%;
   width: 100%;
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: #05070a;
+  overflow: hidden;
+  cursor: pointer;
 }
 
-.peer-stream-video, .peer-stream-canvas {
+.peer-stream-video, 
+.peer-stream-canvas,
+#my-screen-video {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
+  display: block;
+}
+
+/* Theater Mode (Edge-to-edge stream view) */
+#app-container.stage-theater-mode #server-rail {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: width 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+}
+
+#app-container.stage-theater-mode #channels-sidebar {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: width 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+}
+
+#app-container.stage-theater-mode #members-sidebar {
+  display: none !important;
+}
+
+#app-container.stage-theater-mode .channel-top-bar {
+  background: rgba(17, 18, 20, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Fullscreen Styles for Stream */
+:fullscreen .stream-tile-container,
+:-webkit-full-screen .stream-tile-container {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #000 !important;
+}
+
+:fullscreen .stream-media-wrap,
+:-webkit-full-screen .stream-media-wrap {
+  width: 100vw !important;
+  height: 100vh !important;
+  background: #000 !important;
+}
+
+:fullscreen .peer-stream-video,
+:fullscreen .peer-stream-canvas,
+:fullscreen #my-screen-video,
+:-webkit-full-screen .peer-stream-video,
+:-webkit-full-screen .peer-stream-canvas,
+:-webkit-full-screen #my-screen-video {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  object-fit: contain !important;
 }
 
 .stream-standby-overlay {
