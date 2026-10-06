@@ -10,10 +10,10 @@ async function runTests() {
   const assets = [
     'http://localhost:3000/',
     'http://localhost:3000/css/style.css',
-    'http://localhost:3000/js/icons.js?v=9',
-    'http://localhost:3000/js/audio-manager.js?v=9',
-    'http://localhost:3000/js/webrtc-voice.js?v=9',
-    'http://localhost:3000/js/app.js?v=9'
+    'http://localhost:3000/js/icons.js?v=10',
+    'http://localhost:3000/js/audio-manager.js?v=10',
+    'http://localhost:3000/js/webrtc-voice.js?v=10',
+    'http://localhost:3000/js/app.js?v=10'
   ];
 
   for (const asset of assets) {

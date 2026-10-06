@@ -42,6 +42,7 @@ class WebRTCVoiceManager {
 
     this.onPeersUpdateCallback = null;
     this.onLocalSpeaking = null;
+    this.onPeerSpeakingCallback = null;
     this.onPeerVideoUpdate = null;
     this.onPeerScreenFrame = null;
     this.onSoundboardPlayed = null;
@@ -49,6 +50,7 @@ class WebRTCVoiceManager {
     // Dual-Engine Fallback for Screen Sharing
     this.peerScreenFrames = new Map(); // socketId -> frame data URL
     this.pendingIceCandidates = new Map(); // socketId -> [candidates]
+    this._lastStreamRequests = new Map(); // socketId -> timestamp
     this.screenFrameInterval = null;
     this.screenCaptureVideo = null;
     this.screenCaptureCanvas = null;
@@ -189,14 +191,18 @@ class WebRTCVoiceManager {
         this.peers.set(fromSocketId, peer);
       }
 
-      // Indicate speaking
+      // Indicate speaking - only notify on state transition to prevent render thrashing
+      const wasSpeaking = peer.isSpeaking;
       peer.isSpeaking = true;
       if (peer.speakingTimeout) clearTimeout(peer.speakingTimeout);
       peer.speakingTimeout = setTimeout(() => {
         peer.isSpeaking = false;
-        this.notifyPeersUpdate();
-      }, 350);
-      this.notifyPeersUpdate();
+        this.notifyPeerSpeaking(fromSocketId, false);
+      }, 400);
+
+      if (!wasSpeaking) {
+        this.notifyPeerSpeaking(fromSocketId, true);
+      }
 
       // Play audio through Web Audio buffer queue
       this.playAudioChunk(fromSocketId, audioData, sampleRate, fromUser);
@@ -205,9 +211,9 @@ class WebRTCVoiceManager {
     // Speaking indicator event
     this.socket.on('voice:speaking', ({ socketId, isSpeaking }) => {
       const peer = this.peers.get(socketId);
-      if (peer) {
+      if (peer && peer.isSpeaking !== isSpeaking) {
         peer.isSpeaking = isSpeaking;
-        this.notifyPeersUpdate();
+        this.notifyPeerSpeaking(socketId, isSpeaking);
       }
     });
 
@@ -543,15 +549,23 @@ class WebRTCVoiceManager {
       const pc = this.getOrCreatePeerConnection(socketId);
       const activeStream = this.localScreenStream || this.localCameraStream;
       if (activeStream) {
-        // Replace or add track
+        // Replace or add track safely
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         const track = activeStream.getVideoTracks()[0];
         if (sender && track) {
-          await sender.replaceTrack(track);
+          if (sender.track !== track) {
+            await sender.replaceTrack(track);
+          }
         } else if (track) {
           pc.addTrack(track, activeStream);
         }
       }
+
+      if (pc.signalingState !== 'stable') {
+        // Connection negotiation already in progress, avoid colliding offers
+        return;
+      }
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       this.socket.emit('voice:video_signal', {
@@ -668,6 +682,12 @@ class WebRTCVoiceManager {
   }
 
   requestStreamFromPeer(peerSocketId) {
+    if (!this._lastStreamRequests) this._lastStreamRequests = new Map();
+    const now = Date.now();
+    if (this._lastStreamRequests.get(peerSocketId) && (now - this._lastStreamRequests.get(peerSocketId) < 3000)) {
+      return; // Throttled to prevent renegotiation hammering
+    }
+    this._lastStreamRequests.set(peerSocketId, now);
     this.socket.emit('voice:request_stream', { toSocketId: peerSocketId });
   }
 
@@ -697,16 +717,21 @@ class WebRTCVoiceManager {
         if (video.videoWidth > 0 && video.videoHeight > 0) {
           const maxDim = 1280;
           const scale = Math.min(1, maxDim / Math.max(video.videoWidth, video.videoHeight));
-          canvas.width = Math.round(video.videoWidth * scale);
-          canvas.height = Math.round(video.videoHeight * scale);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const targetW = Math.round(video.videoWidth * scale);
+          const targetH = Math.round(video.videoHeight * scale);
+          // Only resize canvas if dimensions actually changed to avoid clearing buffer
+          if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
+          }
+          ctx.drawImage(video, 0, 0, targetW, targetH);
           const frameData = canvas.toDataURL('image/jpeg', 0.65);
           this.socket.emit('voice:screen_frame', {
             channelId: this.currentChannelId,
             frameData
           });
         }
-      }, 120);
+      }, 150);
     } catch (err) {
       console.warn('startScreenFrameBroadcast error:', err);
     }
@@ -826,6 +851,12 @@ class WebRTCVoiceManager {
         volume: this.getPeerVolume(p.socketId, p.userId)
       }));
       this.onPeersUpdateCallback(peerList);
+    }
+  }
+
+  notifyPeerSpeaking(socketId, isSpeaking) {
+    if (this.onPeerSpeakingCallback) {
+      this.onPeerSpeakingCallback(socketId, isSpeaking);
     }
   }
 }
