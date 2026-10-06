@@ -68,6 +68,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnStageSoundboard = document.getElementById('btn-stage-soundboard');
 
   const membersSidebar = document.getElementById('members-sidebar');
+  const btnToggleMembers = document.getElementById('btn-toggle-members');
+  let isMembersSidebarVisible = localStorage.getItem('cordlite_members_visible') !== 'false';
+
+  function setMembersSidebarVisibility(visible) {
+    isMembersSidebarVisible = visible;
+    localStorage.setItem('cordlite_members_visible', visible ? 'true' : 'false');
+    if (membersSidebar) {
+      membersSidebar.style.display = visible ? 'flex' : 'none';
+    }
+    if (btnToggleMembers) {
+      btnToggleMembers.classList.toggle('active', visible);
+      btnToggleMembers.style.opacity = visible ? '1' : '0.6';
+    }
+  }
+
+  if (btnToggleMembers) {
+    btnToggleMembers.onclick = (e) => {
+      e.stopPropagation();
+      setMembersSidebarVisibility(!isMembersSidebarVisible);
+    };
+    setMembersSidebarVisibility(isMembersSidebarVisible);
+  }
   const toastNotification = document.getElementById('toast-notification');
 
   // PiP Floating Mini Player Elements
@@ -1769,6 +1791,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const avatarBg = m.avatarUrl ? 'transparent' : (m.avatarColor || '#5865F2');
 
+      // Subtitle: only show handle if nickname differs, or voice status, or special non-member role
+      let subTitle = '';
+      if (m.voiceChannelId) {
+        subTitle = 'In Voice';
+      } else if (m.nickname && m.nickname !== m.name) {
+        subTitle = `@${escapeHtml(m.name)}`;
+      } else if (m.role && m.role !== 'member') {
+        subTitle = m.role.toUpperCase();
+      }
+
       memEl.innerHTML = `
         <div class="member-avatar" style="background-color: ${avatarBg}">
           ${avatarHtml}
@@ -1776,11 +1808,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="member-info">
           <div class="member-name">
-            ${escapeHtml(m.nickname || m.name)}
+            <span>${escapeHtml(m.nickname || m.name)}</span>
             ${renderRoleBadge(m.role)}
-            ${isMe ? '<span style="font-size: 11px; opacity: 0.6; margin-left: 4px;">(You)</span>' : ''}
+            ${isMe ? '<span style="font-size: 11px; opacity: 0.6; margin-left: 2px;">(You)</span>' : ''}
           </div>
-          <div class="member-role">${m.nickname ? `${escapeHtml(m.name)} • ${m.voiceChannelId ? 'In Voice' : 'Online'}` : (m.voiceChannelId ? 'In Voice' : (m.role ? m.role.toUpperCase() : 'Online'))}</div>
+          ${subTitle ? `<div class="member-role">${subTitle}</div>` : ''}
         </div>
         ${isMutedLocally ? `<span style="color: var(--red); display: flex;" title="Locally Muted">${window.ICONS.speakerMuted}</span>` : ''}
       `;
