@@ -81,12 +81,18 @@
             <div class="status-dot"></div>
           </div>
           <div class="user-text-info">
-            <span class="user-display-name" id="user-display-name">User</span>
-            <span class="user-subtext">Online</span>
+            <div class="user-display-name-wrap" style="display: inline-flex; align-items: center; gap: 4px;">
+              <span class="user-display-name" id="user-display-name">User</span>
+              <span id="user-tg-badge" class="user-tg-badge" style="display: none;" title="Telegram Verified"></span>
+            </div>
+            <span class="user-subtext" id="user-subtext">Online</span>
           </div>
         </div>
 
         <div class="user-actions">
+          <button class="action-btn" id="btn-telegram-auth" title="Sign in with Telegram" style="color: #24a1de;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+          </button>
           <button class="action-btn" id="btn-toggle-mute" title="Mute Microphone">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
           </button>
@@ -340,6 +346,25 @@
               <div class="color-dot" data-color="#ed4245" style="background-color: #ed4245;"></div>
               <div class="color-dot" data-color="#00a8fc" style="background-color: #00a8fc;"></div>
             </div>
+          </div>
+        </div>
+
+        <!-- Section: Telegram Authentication in Settings -->
+        <div class="settings-section">
+          <div class="settings-section-title">Telegram Account</div>
+          <div class="tg-settings-status-box">
+            <div class="tg-status-left">
+              <span class="tg-status-icon" style="color: #24a1de; display: flex; align-items: center;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+              </span>
+              <div class="tg-status-info">
+                <span id="tg-settings-status-title" class="tg-status-title">Not Connected</span>
+                <span id="tg-settings-status-desc" class="tg-status-desc">Link your phone number to receive official Telegram verification.</span>
+              </div>
+            </div>
+            <button type="button" class="btn-primary" id="btn-settings-telegram-action" style="background-color: #24a1de; font-size: 13px; padding: 6px 14px;">
+              Sign In
+            </button>
           </div>
         </div>
 
@@ -624,10 +649,72 @@
     </div>
   </div>
 
+  <!-- Modal: Telegram Sign In -->
+  <div class="modal-overlay" id="modal-telegram-auth" style="display: none;">
+    <div class="modal-window telegram-auth-window">
+      <div class="modal-header telegram-auth-header">
+        <div class="tg-header-badge">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Sign In with Telegram</h2>
+          <p class="modal-subtitle" id="tg-modal-subtitle">Enter your phone number to receive a verification code directly on Telegram.</p>
+        </div>
+        <button class="modal-close-btn btn-close-modal" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Step 1: Input Phone Number -->
+        <div id="tg-step-phone" class="tg-step-panel">
+          <div class="form-group">
+            <label class="form-label" for="input-telegram-phone">Phone Number (International format)</label>
+            <div class="tg-phone-input-wrap">
+              <span class="tg-phone-icon">📞</span>
+              <input class="form-input" id="input-telegram-phone" type="tel" placeholder="+1 234 567 8900" autocomplete="tel" />
+            </div>
+            <span class="form-hint">Must include country code, e.g. +1 for US/CA, +44 for UK, +62 for ID.</span>
+            <div id="tg-phone-error" class="tg-error-msg" style="display: none;"></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Input Verification Code -->
+        <div id="tg-step-code" class="tg-step-panel" style="display: none;">
+          <div class="form-group">
+            <div class="tg-code-sent-info">
+              <span>Code sent to <strong id="tg-target-phone-display">+1...</strong></span>
+              <button type="button" class="btn-text-action" id="btn-tg-change-phone">Change Phone</button>
+            </div>
+            
+            <label class="form-label" for="input-telegram-code" style="margin-top: 12px;">6-Digit Verification Code</label>
+            <input class="form-input tg-code-input" id="input-telegram-code" type="text" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
+            
+            <div id="tg-dev-code-pill" class="tg-dev-code-pill" style="display: none;">
+              <span class="tg-dev-badge">DEV CODE</span>
+              <span>Code: <strong id="tg-dev-code-val"></strong></span>
+              <button type="button" class="btn-copy-code" id="btn-tg-copy-dev-code">Fill Code</button>
+            </div>
+
+            <div id="tg-code-error" class="tg-error-msg" style="display: none;"></div>
+          </div>
+
+          <div class="tg-resend-row">
+            <span id="tg-timer-text">Resend code in <span id="tg-countdown-sec">60</span>s</span>
+            <button type="button" class="btn-text-action" id="btn-tg-resend" style="display: none;">Resend Code</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary btn-close-modal" id="btn-tg-cancel">Cancel</button>
+        <button class="btn-primary" id="btn-tg-primary-action" style="background-color: #24a1de;">Send Code</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/icons.js?v=17"></script>
-  <script src="/js/audio-manager.js?v=17"></script>
-  <script src="/js/webrtc-voice.js?v=17"></script>
-  <script src="/js/app.js?v=17"></script>
+  <script src="/js/icons.js?v=18"></script>
+  <script src="/js/audio-manager.js?v=18"></script>
+  <script src="/js/webrtc-voice.js?v=18"></script>
+  <script src="/js/app.js?v=18"></script>
 </body>
 </html>

@@ -2905,5 +2905,216 @@ input:checked + .slider.round:before {
   font-weight: 400;
 }
 
+/* ==========================================================================
+   Feature 7: Telegram Sign In & Verification Styles
+   ========================================================================== */
+.btn-telegram-auth {
+  transition: all var(--transition-fast);
+}
+
+.btn-telegram-auth:hover {
+  color: #24a1de !important;
+  background-color: rgba(36, 161, 222, 0.16) !important;
+}
+
+.user-tg-badge,
+.tg-verified-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #24a1de;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.user-tg-badge svg,
+.tg-verified-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.telegram-auth-window {
+  max-width: 440px;
+}
+
+.telegram-auth-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+
+.tg-header-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2AABEE 0%, #229ED9 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(36, 161, 222, 0.4);
+}
+
+.tg-phone-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  transition: border-color var(--transition-fast);
+}
+
+.tg-phone-input-wrap:focus-within {
+  border-color: #24a1de;
+}
+
+.tg-phone-icon {
+  font-size: 16px;
+  margin-right: 8px;
+  opacity: 0.8;
+}
+
+.tg-phone-input-wrap input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 10px 0;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+}
+
+.tg-code-input {
+  letter-spacing: 8px;
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+  font-family: monospace;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.tg-code-input:focus {
+  border-color: #24a1de;
+}
+
+.tg-code-sent-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.btn-text-action {
+  background: none;
+  border: none;
+  color: #24a1de;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.btn-text-action:hover {
+  color: #55b8e9;
+}
+
+.tg-dev-code-pill {
+  background: rgba(36, 161, 222, 0.12);
+  border: 1px dashed rgba(36, 161, 222, 0.4);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #fff;
+}
+
+.tg-dev-badge {
+  background: #24a1de;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.btn-copy-code {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-copy-code:hover {
+  background: #24a1de;
+  border-color: #24a1de;
+}
+
+.tg-error-msg {
+  color: var(--red);
+  font-size: 12px;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.tg-resend-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.tg-settings-status-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  gap: 12px;
+}
+
+.tg-status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tg-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tg-status-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tg-status-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+
 
 

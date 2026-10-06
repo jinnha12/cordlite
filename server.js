@@ -72,7 +72,8 @@ const defaultState = {
         timestamp: Date.now() - 1800000
       }
     ]
-  }
+  },
+  users: {}
 };
 
 let db = defaultState;
@@ -82,6 +83,7 @@ try {
     db = JSON.parse(raw);
     if (!db.servers) db.servers = defaultState.servers;
     if (!db.messages) db.messages = defaultState.messages;
+    if (!db.users) db.users = {};
   } else {
     fs.writeFileSync(STORE_PATH, JSON.stringify(defaultState, null, 2));
   }
@@ -181,17 +183,23 @@ app.get('*', (req, res) => {
 const activeUsers = new Map();
 // voiceChannelId -> Set of socketIds
 const voiceRooms = new Map();
+// In-memory Telegram verification sessions: phone -> { code, requestId, expiresAt, isGateway }
+const pendingTelegramAuth = new Map();
 
 io.on('connection', (socket) => {
   // Register user profile
   socket.on('user:register', (userData) => {
     const targetServerId = userData.serverId || 'friends-hangout';
+    const isTg = !!userData.isTelegramVerified;
+    const tgPhone = userData.telegramPhone || null;
     activeUsers.set(socket.id, {
       socketId: socket.id,
       userId: userData.userId || socket.id,
       name: userData.name || 'Anonymous',
       avatarColor: userData.avatarColor || '#5865F2',
       avatarUrl: userData.avatarUrl || null,
+      isTelegramVerified: isTg,
+      telegramPhone: tgPhone,
       serverId: targetServerId,
       channelId: null,
       voiceChannelId: null,
@@ -346,7 +354,9 @@ io.on('connection', (socket) => {
         nickname: (serverId && db.nicknames?.[serverId]?.[user.userId]) || null,
         role: (serverId && db.roles?.[serverId]?.[user.userId]) || (serverId && db.servers[serverId]?.ownerId === user.userId ? 'owner' : 'member'),
         avatarColor: user.avatarColor,
-        avatarUrl: user.avatarUrl || null
+        avatarUrl: user.avatarUrl || null,
+        isTelegramVerified: user.isTelegramVerified || false,
+        telegramPhone: user.telegramPhone || null
       },
       text: text || '',
       attachment: attachment || null,
@@ -617,13 +627,15 @@ io.on('connection', (socket) => {
     broadcastVoiceStatus();
   });
 
-  // Update User Profile (Nickname / Avatar Color / Avatar Picture)
-  socket.on('user:update', ({ name, avatarColor, avatarUrl }) => {
+  // Update User Profile (Nickname / Avatar Color / Avatar Picture / Telegram)
+  socket.on('user:update', ({ name, avatarColor, avatarUrl, isTelegramVerified, telegramPhone }) => {
     const user = activeUsers.get(socket.id);
     if (!user) return;
     if (name) user.name = name;
     if (avatarColor) user.avatarColor = avatarColor;
     if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+    if (isTelegramVerified !== undefined) user.isTelegramVerified = !!isTelegramVerified;
+    if (telegramPhone !== undefined) user.telegramPhone = telegramPhone;
 
     broadcastServerPresence();
     if (user.voiceChannelId) {
@@ -635,6 +647,192 @@ io.on('connection', (socket) => {
         avatarUrl: user.avatarUrl || null
       });
     }
+  });
+
+  // Telegram Authentication: Send Verification Code
+  socket.on('auth:telegram:send_code', async ({ phone }) => {
+    try {
+      if (!phone || typeof phone !== 'string') {
+        return socket.emit('auth:telegram:send_code_error', { message: 'Phone number is required.' });
+      }
+
+      let cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
+      if (!cleanPhone.startsWith('+')) {
+        cleanPhone = '+' + cleanPhone;
+      }
+
+      if (!/^\+[1-9]\d{6,14}$/.test(cleanPhone)) {
+        return socket.emit('auth:telegram:send_code_error', {
+          message: 'Invalid phone format. Please include country code, e.g. +12345678900'
+        });
+      }
+
+      const gatewayToken = process.env.TELEGRAM_GATEWAY_TOKEN;
+      if (gatewayToken) {
+        // Official Telegram Gateway API integration
+        const tgRes = await fetch('https://gatewayapi.telegram.org/sendVerificationMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${gatewayToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            phone_number: cleanPhone,
+            ttl: 300
+          })
+        });
+
+        const tgData = await tgRes.json();
+        if (tgData.ok && tgData.result) {
+          pendingTelegramAuth.set(cleanPhone, {
+            requestId: tgData.result.request_id,
+            expiresAt: Date.now() + 300000,
+            isGateway: true
+          });
+          return socket.emit('auth:telegram:code_sent', {
+            success: true,
+            phone: cleanPhone,
+            devMode: false
+          });
+        } else {
+          return socket.emit('auth:telegram:send_code_error', {
+            message: tgData.description || 'Telegram Gateway could not deliver message to this phone number.'
+          });
+        }
+      } else {
+        // Zero-Config Dev Mode for local development & testing
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        pendingTelegramAuth.set(cleanPhone, {
+          code,
+          expiresAt: Date.now() + 300000,
+          isGateway: false
+        });
+
+        console.log(`\n=================================================`);
+        console.log(`[Telegram Auth Dev Mode] Code for ${cleanPhone}: ${code}`);
+        console.log(`=================================================\n`);
+
+        return socket.emit('auth:telegram:code_sent', {
+          success: true,
+          phone: cleanPhone,
+          devMode: true,
+          devCode: code
+        });
+      }
+    } catch (err) {
+      console.error('Error in auth:telegram:send_code:', err);
+      socket.emit('auth:telegram:send_code_error', { message: 'Failed to send verification code. Try again.' });
+    }
+  });
+
+  // Telegram Authentication: Verify Code
+  socket.on('auth:telegram:verify_code', async ({ phone, code }) => {
+    try {
+      if (!phone || !code) {
+        return socket.emit('auth:telegram:verify_error', { message: 'Phone and code are required.' });
+      }
+
+      let cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
+      if (!cleanPhone.startsWith('+')) cleanPhone = '+' + cleanPhone;
+      const cleanCode = code.toString().trim();
+
+      const session = pendingTelegramAuth.get(cleanPhone);
+      if (!session) {
+        return socket.emit('auth:telegram:verify_error', { message: 'No verification pending for this phone number. Please request a new code.' });
+      }
+
+      if (Date.now() > session.expiresAt) {
+        pendingTelegramAuth.delete(cleanPhone);
+        return socket.emit('auth:telegram:verify_error', { message: 'Verification code has expired. Please request a new code.' });
+      }
+
+      let verified = false;
+      const gatewayToken = process.env.TELEGRAM_GATEWAY_TOKEN;
+
+      if (session.isGateway && gatewayToken) {
+        const checkRes = await fetch('https://gatewayapi.telegram.org/checkVerificationStatus', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${gatewayToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            request_id: session.requestId,
+            code: cleanCode
+          })
+        });
+        const checkData = await checkRes.json();
+        if (checkData.ok && checkData.result && checkData.result.status === 'verified') {
+          verified = true;
+        } else {
+          return socket.emit('auth:telegram:verify_error', { message: checkData.description || 'Incorrect code. Please check your Telegram app.' });
+        }
+      } else {
+        // Dev Mode match
+        if (session.code === cleanCode) {
+          verified = true;
+        } else {
+          return socket.emit('auth:telegram:verify_error', { message: 'Incorrect verification code. Please try again.' });
+        }
+      }
+
+      if (verified) {
+        pendingTelegramAuth.delete(cleanPhone);
+
+        if (!db.users) db.users = {};
+        let userRecord = Object.values(db.users).find(u => u.telegramPhone === cleanPhone);
+
+        const currentActiveUser = activeUsers.get(socket.id);
+        const currentUserId = currentActiveUser ? currentActiveUser.userId : ('usr-' + Math.random().toString(36).substring(2, 9));
+
+        if (!userRecord) {
+          userRecord = {
+            userId: currentUserId,
+            name: currentActiveUser?.name?.startsWith('User') ? `TelegramUser_${cleanPhone.slice(-4)}` : (currentActiveUser?.name || `TelegramUser_${cleanPhone.slice(-4)}`),
+            avatarColor: currentActiveUser?.avatarColor || '#24A1DE',
+            avatarUrl: currentActiveUser?.avatarUrl || null,
+            telegramPhone: cleanPhone,
+            isTelegramVerified: true,
+            createdAt: Date.now()
+          };
+          db.users[userRecord.userId] = userRecord;
+        } else {
+          userRecord.isTelegramVerified = true;
+          userRecord.lastLogin = Date.now();
+        }
+        saveStore();
+
+        if (currentActiveUser) {
+          currentActiveUser.userId = userRecord.userId;
+          currentActiveUser.name = userRecord.name;
+          currentActiveUser.avatarColor = userRecord.avatarColor;
+          currentActiveUser.avatarUrl = userRecord.avatarUrl;
+          currentActiveUser.isTelegramVerified = true;
+          currentActiveUser.telegramPhone = cleanPhone;
+        }
+
+        socket.emit('auth:telegram:success', { user: userRecord });
+        broadcastServerPresence();
+      }
+    } catch (err) {
+      console.error('Error in auth:telegram:verify_code:', err);
+      socket.emit('auth:telegram:verify_error', { message: 'Verification failed. Try again.' });
+    }
+  });
+
+  // Telegram Authentication: Unlink / Logout
+  socket.on('auth:telegram:unlink', () => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    user.isTelegramVerified = false;
+    user.telegramPhone = null;
+    if (db.users && db.users[user.userId]) {
+      db.users[user.userId].isTelegramVerified = false;
+      delete db.users[user.userId].telegramPhone;
+      saveStore();
+    }
+    socket.emit('auth:telegram:unlinked');
+    broadcastServerPresence();
   });
 
   // Disconnect
@@ -697,6 +895,8 @@ function broadcastServerPresence() {
       role: role,
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl || null,
+      isTelegramVerified: user.isTelegramVerified || false,
+      telegramPhone: user.telegramPhone || null,
       serverId: user.serverId,
       serverName: srvName,
       voiceChannelId: user.voiceChannelId,

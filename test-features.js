@@ -244,6 +244,63 @@ async function runTests() {
     client1.emit('server:create', { name: 'Battle Grounds', icon: '' });
   });
 
+  // Test Feature 7: Telegram Sign-In with Phone Number & Code Verification
+  const testTgPhone = '+14155552671';
+  let receivedTgCode = null;
+
+  await new Promise((resolve) => {
+    client1.once('auth:telegram:code_sent', (data) => {
+      if (data.success && data.phone === testTgPhone) {
+        console.log(`[PASS] Feature 7: Telegram verification code sent for ${data.phone} (devMode: ${data.devMode})!`);
+        receivedTgCode = data.devCode;
+        resolve();
+      } else {
+        console.error('[FAIL] Feature 7: Failed to receive code_sent event:', data);
+        failures++;
+        resolve();
+      }
+    });
+
+    client1.emit('auth:telegram:send_code', { phone: testTgPhone });
+  });
+
+  if (receivedTgCode) {
+    await new Promise((resolve) => {
+      client1.once('auth:telegram:success', (data) => {
+        if (data.user && data.user.isTelegramVerified && data.user.telegramPhone === testTgPhone) {
+          console.log(`[PASS] Feature 7: Telegram code verified successfully! User: ${data.user.name} (${data.user.telegramPhone})`);
+          resolve();
+        } else {
+          console.error('[FAIL] Feature 7: Telegram verification returned invalid user:', data);
+          failures++;
+          resolve();
+        }
+      });
+
+      client1.emit('auth:telegram:verify_code', { phone: testTgPhone, code: receivedTgCode });
+    });
+
+    // Test verified Telegram badge in chat message
+    await new Promise((resolve) => {
+      client2.once('chat:message', (msg) => {
+        if (msg.user.isTelegramVerified) {
+          console.log('[PASS] Feature 7: Verified Telegram badge successfully attached to outgoing message!');
+          resolve();
+        } else {
+          console.error('[FAIL] Feature 7: Message missing isTelegramVerified flag:', msg.user);
+          failures++;
+          resolve();
+        }
+      });
+
+      client1.emit('chat:send', {
+        serverId: 'friends-hangout',
+        channelId: 'c-general',
+        text: 'Hello from verified Telegram user!'
+      });
+    });
+  }
+
   client1.disconnect();
   client2.disconnect();
 

@@ -143,7 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('user:update', {
       name: user.name,
       avatarColor: user.avatarColor,
-      avatarUrl: user.avatarUrl
+      avatarUrl: user.avatarUrl,
+      isTelegramVerified: user.isTelegramVerified || false,
+      telegramPhone: user.telegramPhone || null
     });
     renderUserBar();
     renderMembers();
@@ -159,6 +161,29 @@ document.addEventListener('DOMContentLoaded', () => {
       userAvatarBadge.innerHTML = `${escapeHtml(user.name.charAt(0).toUpperCase())}<div class="status-dot"></div>`;
     }
     userDisplayName.textContent = user.name;
+
+    const userTgBadge = document.getElementById('user-tg-badge');
+    const userSubtext = document.getElementById('user-subtext');
+    const btnTelegramAuth = document.getElementById('btn-telegram-auth');
+    if (userTgBadge) {
+      if (user.isTelegramVerified) {
+        userTgBadge.innerHTML = window.ICONS.telegramBadge;
+        userTgBadge.style.display = 'inline-flex';
+        if (userSubtext) userSubtext.textContent = user.telegramPhone ? `TG: ${user.telegramPhone}` : 'Online';
+        if (btnTelegramAuth) {
+          btnTelegramAuth.title = 'Telegram Verified (' + (user.telegramPhone || '') + ')';
+          btnTelegramAuth.style.opacity = '0.7';
+        }
+      } else {
+        userTgBadge.style.display = 'none';
+        if (userSubtext) userSubtext.textContent = 'Online';
+        if (btnTelegramAuth) {
+          btnTelegramAuth.title = 'Sign in with Telegram';
+          btnTelegramAuth.style.opacity = '1';
+        }
+      }
+    }
+
     const userBar = document.querySelector('.user-bar');
     if (userBar) {
       userBar.oncontextmenu = (e) => showUserContextMenu(e, user);
@@ -575,6 +600,8 @@ document.addEventListener('DOMContentLoaded', () => {
       name: user.name,
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl,
+      isTelegramVerified: user.isTelegramVerified || false,
+      telegramPhone: user.telegramPhone || null,
       serverId: inviteServerId || 'friends-hangout'
     });
   });
@@ -1586,6 +1613,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const authorDisplayName = msg.user.nickname || msg.user.name;
     const authorRoleBadge = renderRoleBadge(msg.user.role);
     const authorHandleHtml = msg.user.nickname ? `<span class="user-username-sub">(@${escapeHtml(msg.user.name)})</span>` : '';
+    const authorTgBadge = msg.user.isTelegramVerified ? `<span class="tg-verified-icon" title="Telegram Verified">${window.ICONS.telegramBadge}</span>` : '';
 
     card.innerHTML = `
       <div class="message-actions-bar">
@@ -1600,6 +1628,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="message-content-wrapper">
         <div class="message-header">
           <span class="message-author">${escapeHtml(authorDisplayName)}</span>
+          ${authorTgBadge}
           ${authorHandleHtml}
           ${authorRoleBadge}
           <span class="message-timestamp">${timeStr}</span>
@@ -1827,6 +1856,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="member-info">
           <div class="member-name">
             <span>${escapeHtml(m.nickname || m.name)}</span>
+            ${m.isTelegramVerified ? `<span class="tg-verified-icon" title="Telegram Verified">${window.ICONS.telegramBadge}</span>` : ''}
             ${renderRoleBadge(m.role)}
             ${isMe ? '<span style="font-size: 11px; opacity: 0.6; margin-left: 2px;">(You)</span>' : ''}
           </div>
@@ -2474,6 +2504,7 @@ document.addEventListener('DOMContentLoaded', () => {
       streamQualityCards.forEach(c => {
         c.classList.toggle('selected', c.dataset.quality === currentStreamQuality);
       });
+      syncTelegramSettingsStatus();
       if (origBtnUserSettingsClick) origBtnUserSettingsClick();
     };
   }
@@ -2765,4 +2796,300 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   initQuickSwitcher();
+
+  // ==========================================================================
+  // Feature 7: Telegram Sign-In with Phone Number Verification
+  // ==========================================================================
+  const modalTelegramAuth = document.getElementById('modal-telegram-auth');
+  const btnTelegramAuth = document.getElementById('btn-telegram-auth');
+  const btnSettingsTelegramAction = document.getElementById('btn-settings-telegram-action');
+  const tgStepPhone = document.getElementById('tg-step-phone');
+  const tgStepCode = document.getElementById('tg-step-code');
+  const inputTelegramPhone = document.getElementById('input-telegram-phone');
+  const inputTelegramCode = document.getElementById('input-telegram-code');
+  const tgPhoneError = document.getElementById('tg-phone-error');
+  const tgCodeError = document.getElementById('tg-code-error');
+  const tgTargetPhoneDisplay = document.getElementById('tg-target-phone-display');
+  const btnTgPrimaryAction = document.getElementById('btn-tg-primary-action');
+  const btnTgChangePhone = document.getElementById('btn-tg-change-phone');
+  const btnTgResend = document.getElementById('btn-tg-resend');
+  const tgCountdownSec = document.getElementById('tg-countdown-sec');
+  const tgTimerText = document.getElementById('tg-timer-text');
+  const tgDevCodePill = document.getElementById('tg-dev-code-pill');
+  const tgDevCodeVal = document.getElementById('tg-dev-code-val');
+  const btnTgCopyDevCode = document.getElementById('btn-tg-copy-dev-code');
+
+  let tgCurrentStep = 'phone';
+  let tgCurrentPhone = '';
+  let tgResendInterval = null;
+
+  function syncTelegramSettingsStatus() {
+    const tgSettingsStatusTitle = document.getElementById('tg-settings-status-title');
+    const tgSettingsStatusDesc = document.getElementById('tg-settings-status-desc');
+    const btnAct = document.getElementById('btn-settings-telegram-action');
+    if (!tgSettingsStatusTitle || !btnAct) return;
+
+    if (user.isTelegramVerified) {
+      tgSettingsStatusTitle.textContent = `Connected (${user.telegramPhone || 'Verified'})`;
+      if (tgSettingsStatusDesc) tgSettingsStatusDesc.textContent = 'Your account is linked with Telegram.';
+      btnAct.textContent = 'Unlink';
+      btnAct.style.backgroundColor = 'rgba(237, 66, 69, 0.2)';
+      btnAct.style.color = '#ed4245';
+      btnAct.style.border = '1px solid rgba(237, 66, 69, 0.4)';
+    } else {
+      tgSettingsStatusTitle.textContent = 'Not Connected';
+      if (tgSettingsStatusDesc) tgSettingsStatusDesc.textContent = 'Link your phone number to receive official Telegram verification.';
+      btnAct.textContent = 'Sign In';
+      btnAct.style.backgroundColor = '#24a1de';
+      btnAct.style.color = '#ffffff';
+      btnAct.style.border = 'none';
+    }
+  }
+
+  function openTelegramAuthModal() {
+    tgCurrentStep = 'phone';
+    tgCurrentPhone = '';
+    if (tgStepPhone) tgStepPhone.style.display = 'block';
+    if (tgStepCode) tgStepCode.style.display = 'none';
+    if (tgPhoneError) tgPhoneError.style.display = 'none';
+    if (tgCodeError) tgCodeError.style.display = 'none';
+    if (inputTelegramPhone) {
+      inputTelegramPhone.value = user.telegramPhone || '';
+    }
+    if (inputTelegramCode) inputTelegramCode.value = '';
+    if (btnTgPrimaryAction) {
+      btnTgPrimaryAction.textContent = 'Send Code';
+      btnTgPrimaryAction.disabled = false;
+    }
+    if (tgDevCodePill) tgDevCodePill.style.display = 'none';
+    if (tgResendInterval) clearInterval(tgResendInterval);
+
+    openModal(modalTelegramAuth);
+    setTimeout(() => {
+      if (inputTelegramPhone) inputTelegramPhone.focus();
+    }, 100);
+  }
+
+  function startTgResendCountdown() {
+    if (tgResendInterval) clearInterval(tgResendInterval);
+    let secondsLeft = 60;
+    if (tgCountdownSec) tgCountdownSec.textContent = secondsLeft;
+    if (tgTimerText) tgTimerText.style.display = 'inline';
+    if (btnTgResend) btnTgResend.style.display = 'none';
+
+    tgResendInterval = setInterval(() => {
+      secondsLeft--;
+      if (tgCountdownSec) tgCountdownSec.textContent = secondsLeft;
+      if (secondsLeft <= 0) {
+        clearInterval(tgResendInterval);
+        if (tgTimerText) tgTimerText.style.display = 'none';
+        if (btnTgResend) btnTgResend.style.display = 'inline-block';
+      }
+    }, 1000);
+  }
+
+  function handleTgSendCode() {
+    if (!inputTelegramPhone) return;
+    const phone = inputTelegramPhone.value.trim();
+    if (!phone) {
+      if (tgPhoneError) {
+        tgPhoneError.textContent = 'Please enter your phone number.';
+        tgPhoneError.style.display = 'block';
+      }
+      return;
+    }
+
+    if (tgPhoneError) tgPhoneError.style.display = 'none';
+    if (btnTgPrimaryAction) {
+      btnTgPrimaryAction.textContent = 'Sending...';
+      btnTgPrimaryAction.disabled = true;
+    }
+
+    socket.emit('auth:telegram:send_code', { phone });
+  }
+
+  function handleTgVerifyCode() {
+    if (!inputTelegramCode) return;
+    const code = inputTelegramCode.value.trim();
+    if (!code || code.length < 5) {
+      if (tgCodeError) {
+        tgCodeError.textContent = 'Please enter the 6-digit code sent to your Telegram.';
+        tgCodeError.style.display = 'block';
+      }
+      return;
+    }
+
+    if (tgCodeError) tgCodeError.style.display = 'none';
+    if (btnTgPrimaryAction) {
+      btnTgPrimaryAction.textContent = 'Verifying...';
+      btnTgPrimaryAction.disabled = true;
+    }
+
+    socket.emit('auth:telegram:verify_code', { phone: tgCurrentPhone, code });
+  }
+
+  if (btnTelegramAuth) {
+    btnTelegramAuth.onclick = () => {
+      openTelegramAuthModal();
+    };
+  }
+
+  if (btnSettingsTelegramAction) {
+    btnSettingsTelegramAction.onclick = () => {
+      if (user.isTelegramVerified) {
+        if (confirm('Are you sure you want to unlink your Telegram account?')) {
+          socket.emit('auth:telegram:unlink');
+        }
+      } else {
+        closeModal(modalProfile);
+        openTelegramAuthModal();
+      }
+    };
+  }
+
+  if (btnTgPrimaryAction) {
+    btnTgPrimaryAction.onclick = () => {
+      if (tgCurrentStep === 'phone') {
+        handleTgSendCode();
+      } else {
+        handleTgVerifyCode();
+      }
+    };
+  }
+
+  if (inputTelegramPhone) {
+    inputTelegramPhone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleTgSendCode();
+      }
+    });
+  }
+
+  if (inputTelegramCode) {
+    inputTelegramCode.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleTgVerifyCode();
+      }
+    });
+    inputTelegramCode.addEventListener('input', () => {
+      const val = inputTelegramCode.value.trim().replace(/\D/g, '');
+      inputTelegramCode.value = val;
+      if (val.length === 6) {
+        handleTgVerifyCode();
+      }
+    });
+  }
+
+  if (btnTgChangePhone) {
+    btnTgChangePhone.onclick = () => {
+      tgCurrentStep = 'phone';
+      if (tgStepPhone) tgStepPhone.style.display = 'block';
+      if (tgStepCode) tgStepCode.style.display = 'none';
+      if (btnTgPrimaryAction) {
+        btnTgPrimaryAction.textContent = 'Send Code';
+        btnTgPrimaryAction.disabled = false;
+      }
+      if (tgCodeError) tgCodeError.style.display = 'none';
+      if (inputTelegramPhone) inputTelegramPhone.focus();
+    };
+  }
+
+  if (btnTgResend) {
+    btnTgResend.onclick = () => {
+      handleTgSendCode();
+    };
+  }
+
+  if (btnTgCopyDevCode && inputTelegramCode) {
+    btnTgCopyDevCode.onclick = () => {
+      if (tgDevCodeVal && tgDevCodeVal.textContent) {
+        inputTelegramCode.value = tgDevCodeVal.textContent.trim();
+        handleTgVerifyCode();
+      }
+    };
+  }
+
+  // Socket: Code Sent
+  socket.on('auth:telegram:code_sent', (data) => {
+    tgCurrentStep = 'code';
+    tgCurrentPhone = data.phone;
+    if (tgStepPhone) tgStepPhone.style.display = 'none';
+    if (tgStepCode) tgStepCode.style.display = 'block';
+    if (tgTargetPhoneDisplay) tgTargetPhoneDisplay.textContent = data.phone;
+    if (btnTgPrimaryAction) {
+      btnTgPrimaryAction.textContent = 'Verify Code';
+      btnTgPrimaryAction.disabled = false;
+    }
+    if (inputTelegramCode) {
+      inputTelegramCode.value = '';
+      inputTelegramCode.focus();
+    }
+    if (data.devMode && tgDevCodePill && tgDevCodeVal) {
+      tgDevCodeVal.textContent = data.devCode;
+      tgDevCodePill.style.display = 'flex';
+    } else if (tgDevCodePill) {
+      tgDevCodePill.style.display = 'none';
+    }
+    startTgResendCountdown();
+    showToast(`Code sent to Telegram for ${data.phone}`);
+  });
+
+  // Socket: Send Code Error
+  socket.on('auth:telegram:send_code_error', (data) => {
+    if (btnTgPrimaryAction) {
+      btnTgPrimaryAction.textContent = 'Send Code';
+      btnTgPrimaryAction.disabled = false;
+    }
+    if (tgPhoneError) {
+      tgPhoneError.textContent = data.message || 'Failed to send code.';
+      tgPhoneError.style.display = 'block';
+    }
+  });
+
+  // Socket: Verify Success
+  socket.on('auth:telegram:success', (data) => {
+    const verifiedUser = data.user;
+    user.isTelegramVerified = true;
+    user.telegramPhone = verifiedUser.telegramPhone;
+    if (verifiedUser.name && user.name.startsWith('User')) {
+      user.name = verifiedUser.name;
+    }
+    if (verifiedUser.avatarColor) {
+      user.avatarColor = verifiedUser.avatarColor;
+    }
+    localStorage.setItem('cordlite_user', JSON.stringify(user));
+
+    renderUserBar();
+    renderMembers();
+    syncTelegramSettingsStatus();
+    closeModal(modalTelegramAuth);
+    if (tgResendInterval) clearInterval(tgResendInterval);
+
+    showToast(`Signed in with Telegram (${verifiedUser.telegramPhone})!`);
+  });
+
+  // Socket: Verify Error
+  socket.on('auth:telegram:verify_error', (data) => {
+    if (btnTgPrimaryAction) {
+      btnTgPrimaryAction.textContent = 'Verify Code';
+      btnTgPrimaryAction.disabled = false;
+    }
+    if (tgCodeError) {
+      tgCodeError.textContent = data.message || 'Incorrect verification code.';
+      tgCodeError.style.display = 'block';
+    }
+  });
+
+  // Socket: Unlinked
+  socket.on('auth:telegram:unlinked', () => {
+    user.isTelegramVerified = false;
+    user.telegramPhone = null;
+    localStorage.setItem('cordlite_user', JSON.stringify(user));
+    renderUserBar();
+    renderMembers();
+    syncTelegramSettingsStatus();
+    showToast('Telegram account unlinked.');
+  });
 });
