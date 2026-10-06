@@ -1,19 +1,36 @@
 /**
- * WebRTC Voice Engine - Mesh voice calling with public STUN servers
+ * WebRTC Voice Engine - Mesh voice calling with public STUN & TURN relay servers
  */
 class WebRTCVoiceManager {
   constructor(socket) {
     this.socket = socket;
     this.localStream = null;
-    this.peers = new Map(); // socketId -> { pc, audioEl, isSpeaking, name, avatarColor }
+    this.peers = new Map(); // socketId -> { pc, audioEl, isSpeaking, name, avatarColor, pendingCandidates }
     this.currentChannelId = null;
     this.isMuted = false;
     this.isDeafened = false;
 
+    // STUN + Free OpenRelay TURN servers (supports UDP + TCP over 80/443 to pierce symmetric NAT and firewalls)
     this.iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelay',
+        credential: 'openrelay'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelay',
+        credential: 'openrelay'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelay',
+        credential: 'openrelay'
+      }
     ];
 
     this.onPeersUpdateCallback = null;
@@ -25,7 +42,7 @@ class WebRTCVoiceManager {
   }
 
   setupSocketEvents() {
-    // When we join, the server tells us who is currently in the room
+    // When we join, server gives list of existing occupants in that voice channel
     this.socket.on('voice:current_peers', async ({ channelId, peers }) => {
       this.currentChannelId = channelId;
       for (const peer of peers) {
@@ -34,7 +51,7 @@ class WebRTCVoiceManager {
       this.notifyPeersUpdate();
     });
 
-    // When a new user joins after us
+    // When someone joins after us
     this.socket.on('voice:user_joined', async (peer) => {
       await this.initiatePeerConnection(peer.socketId, peer, false);
       this.notifyPeersUpdate();
@@ -54,16 +71,28 @@ class WebRTCVoiceManager {
       try {
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          await this.flushPendingCandidates(peerData);
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+
           this.socket.emit('voice:signal', {
             toSocketId: fromSocketId,
             signal: pc.localDescription
           });
         } else if (signal.type === 'answer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          await this.flushPendingCandidates(peerData);
         } else if (signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          if (!pc.remoteDescription || !pc.remoteDescription.type) {
+            peerData.pendingCandidates.push(signal.candidate);
+          } else {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+            } catch (err) {
+              console.warn('ICE candidate addition failed:', err);
+            }
+          }
         }
       } catch (err) {
         console.error('Error handling WebRTC signal:', err);
@@ -106,6 +135,20 @@ class WebRTCVoiceManager {
     });
   }
 
+  async flushPendingCandidates(peerData) {
+    if (!peerData || !peerData.pc) return;
+    const candidates = peerData.pendingCandidates || [];
+    peerData.pendingCandidates = [];
+
+    for (const cand of candidates) {
+      try {
+        await peerData.pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.warn('Failed to flush queued candidate:', e);
+      }
+    }
+  }
+
   async acquireLocalAudio() {
     if (this.localStream) return this.localStream;
     try {
@@ -117,7 +160,7 @@ class WebRTCVoiceManager {
         },
         video: false
       });
-      // Set initial mute status
+
       this.applyMuteState();
 
       // Start local Voice Activity Detection
@@ -130,7 +173,6 @@ class WebRTCVoiceManager {
       return this.localStream;
     } catch (err) {
       console.warn('Microphone permission not granted or device unavailable:', err);
-      // Fallback empty audio stream so voice room connection still works
       const ctx = window.audioManager.getAudioContext();
       if (ctx) {
         const dest = ctx.createMediaStreamDestination();
@@ -170,7 +212,11 @@ class WebRTCVoiceManager {
   async initiatePeerConnection(peerSocketId, peerUser, isInitiator) {
     if (this.peers.has(peerSocketId)) return;
 
-    const pc = new RTCPeerConnection({ iceServers: this.iceServers });
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 10
+    });
+
     const audioEl = new Audio();
     audioEl.autoplay = true;
 
@@ -183,7 +229,8 @@ class WebRTCVoiceManager {
       isMuted: peerUser.isMuted || false,
       isDeafened: peerUser.isDeafened || false,
       pc,
-      audioEl
+      audioEl,
+      pendingCandidates: []
     };
     this.peers.set(peerSocketId, peerData);
 
@@ -194,10 +241,13 @@ class WebRTCVoiceManager {
       });
     }
 
-    // Handle incoming audio stream
+    // Handle incoming remote audio stream
     pc.ontrack = (event) => {
       audioEl.srcObject = event.streams[0];
       audioEl.muted = this.isDeafened;
+      audioEl.play().catch(e => {
+        console.warn('Audio auto-play waiting for user interaction:', e);
+      });
     };
 
     // Forward ICE candidates to signaling server
@@ -210,9 +260,21 @@ class WebRTCVoiceManager {
       }
     };
 
+    // Auto restart ICE if connection is interrupted
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC ICE State with ${peerUser.name}]:`, pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        if (typeof pc.restartIce === 'function') {
+          pc.restartIce();
+        }
+      }
+    };
+
     if (isInitiator) {
       try {
-        const offer = await pc.createOffer();
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true
+        });
         await pc.setLocalDescription(offer);
         this.socket.emit('voice:signal', {
           toSocketId: peerSocketId,
@@ -245,12 +307,10 @@ class WebRTCVoiceManager {
 
   toggleDeafen() {
     this.isDeafened = !this.isDeafened;
-    // Deafening automatically mutes you too, just like Discord
     if (this.isDeafened && !this.isMuted) {
       this.isMuted = true;
       this.applyMuteState();
     }
-    // Mute or unmute all remote incoming audio
     for (const [_, peer] of this.peers.entries()) {
       if (peer.audioEl) {
         peer.audioEl.muted = this.isDeafened;
