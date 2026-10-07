@@ -30,6 +30,141 @@
   --shadow-elevation-low: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05);
   --shadow-elevation-high: 0 8px 16px rgba(0,0,0,0.3);
 }
+/* ======================================================
+   Telegram Login Splash Screen
+   ====================================================== */
+#tg-login-splash {
+  position: fixed;
+  inset: 0;
+  background-color: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+#tg-login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+#tg-login-logo {
+  width: 60px;
+  height: 60px;
+  background: #24a1de;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+#tg-login-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-header);
+  margin: 0;
+}
+
+#tg-login-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+  margin: -6px 0 6px;
+}
+
+#tg-splash-step-phone,
+#tg-splash-step-code {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+#tg-login-card .btn-primary {
+  width: 100%;
+  padding: 10px;
+  background: #24a1de;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+#tg-login-card .btn-primary:hover {
+  background: #1a8ec4;
+}
+
+#tg-login-card .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#tg-login-card .btn-secondary {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(36, 161, 222, 0.4);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  color: #24a1de;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+#tg-login-card .btn-secondary:hover {
+  background: rgba(36, 161, 222, 0.1);
+  border-color: #24a1de;
+}
+
+#tg-login-card .btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#tg-login-card .tg-phone-input-wrap {
+  width: 100%;
+}
+
+#tg-login-card .tg-phone-input-wrap input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+#tg-splash-phone-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+#tg-splash-code-label {
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+#tg-login-card .tg-code-input {
+  font-size: 22px;
+  letter-spacing: 8px;
+  text-align: center;
+  width: 100%;
+  font-family: monospace;
+}
+
 
 * {
   box-sizing: border-box;
@@ -3075,3 +3210,80 @@ input:checked + .slider.round:before {
 
 
 
+
+.tg-bot-auth-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.tg-bot-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.tg-bot-alt-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.tg-bot-alt-divider::before,
+.tg-bot-alt-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tg-bot-alt-divider span {
+  padding: 0 8px;
+}
+
+.tg-bot-code-row {
+  font-size: 13px;
+  color: var(--text-normal);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tg-code-badge {
+  background: var(--bg-tertiary);
+  color: var(--text-header);
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tg-status-waiting {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #24a1de;
+  animation: pulse-dot-anim 1.8s infinite ease-in-out;
+}
+
+@keyframes pulse-dot-anim {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.6; }
+}

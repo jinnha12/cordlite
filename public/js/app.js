@@ -3,10 +3,79 @@
  * Pure Discord aesthetics with zero emojis - 100% SVG icons
  */
 document.addEventListener('DOMContentLoaded', () => {
-  // State
-  let user = getOrInitUser();
+  // State & Telegram Login Gate
+  let user = checkExistingSession();
+  let isSplashVisible = !user;
   let socket = io();
-  let voiceManager = new WebRTCVoiceManager(socket, user);
+  let voiceManager = new WebRTCVoiceManager(socket, user || { userId: 'pending', name: 'User', avatarColor: '#5865F2' });
+
+  function checkExistingSession() {
+    let saved = localStorage.getItem('cordlite_user');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.userId && parsed.isTelegramVerified) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  function showLoginSplash() {
+    const splash = document.getElementById('tg-login-splash');
+    const appContainer = document.getElementById('app-container');
+    if (splash) splash.style.display = 'flex';
+    if (appContainer) appContainer.style.display = 'none';
+  }
+
+  function showMainApp(authenticatedUser) {
+    user = authenticatedUser;
+    selectedProfileColor = user.avatarColor || '#5865F2';
+    voiceManager.user = user;
+    isSplashVisible = false;
+
+    const splash = document.getElementById('tg-login-splash');
+    const appContainer = document.getElementById('app-container');
+    if (splash) splash.style.display = 'none';
+    if (appContainer) appContainer.style.display = 'flex';
+
+    renderUserBar();
+    syncTelegramAccountSection();
+    doRegister();
+  }
+
+  function doRegister() {
+    if (!user || !socket || !socket.connected) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteServerId = urlParams.get('invite') || urlParams.get('server');
+
+    socket.emit('user:register', {
+      userId: user.userId,
+      name: user.name,
+      avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
+      isTelegramVerified: true,
+      telegramPhone: user.telegramPhone || null,
+      serverId: inviteServerId || 'friends-hangout'
+    });
+  }
+
+  function logout() {
+    localStorage.removeItem('cordlite_user');
+    window.location.reload();
+  }
+
+  function syncTelegramAccountSection() {
+    const phoneDisplay = document.getElementById('settings-account-phone');
+    const btnLogout = document.getElementById('btn-logout');
+    if (phoneDisplay && user) {
+      phoneDisplay.textContent = user.telegramUsername ? ('@' + user.telegramUsername) : (user.name || 'Connected');
+    }
+    if (btnLogout) {
+      btnLogout.onclick = logout;
+    }
+  }
 
   let servers = [];
   let currentServer = null;
@@ -27,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentInputMode = localStorage.getItem('cordlite_input_mode') || 'vad';
   let currentPttKey = localStorage.getItem('cordlite_ptt_key') || 'Space';
   let isRecordingPttKey = false;
-  let tempAvatarUrl = user.avatarUrl || null;
+  let tempAvatarUrl = (user && user.avatarUrl) || null;
   let activeReactionMessageId = null;
 
   // DOM Elements
@@ -153,6 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderUserBar() {
+    if (!user) return;
     if (user.avatarUrl) {
       userAvatarBadge.innerHTML = `<img src="${user.avatarUrl}" alt="${escapeHtml(user.name)}"><div class="status-dot"></div>`;
       userAvatarBadge.style.backgroundColor = 'transparent';
@@ -164,24 +234,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const userTgBadge = document.getElementById('user-tg-badge');
     const userSubtext = document.getElementById('user-subtext');
-    const btnTelegramAuth = document.getElementById('btn-telegram-auth');
     if (userTgBadge) {
-      if (user.isTelegramVerified) {
-        userTgBadge.innerHTML = window.ICONS.telegramBadge;
-        userTgBadge.style.display = 'inline-flex';
-        if (userSubtext) userSubtext.textContent = user.telegramPhone ? `TG: ${user.telegramPhone}` : 'Online';
-        if (btnTelegramAuth) {
-          btnTelegramAuth.title = 'Telegram Verified (' + (user.telegramPhone || '') + ')';
-          btnTelegramAuth.style.opacity = '0.7';
-        }
-      } else {
-        userTgBadge.style.display = 'none';
-        if (userSubtext) userSubtext.textContent = 'Online';
-        if (btnTelegramAuth) {
-          btnTelegramAuth.title = 'Sign in with Telegram';
-          btnTelegramAuth.style.opacity = '1';
-        }
-      }
+      userTgBadge.innerHTML = window.ICONS.telegramBadge;
+      userTgBadge.style.display = 'inline-flex';
+    }
+    if (userSubtext) {
+      userSubtext.textContent = user.telegramPhone ? `TG: ${user.telegramPhone}` : 'Online';
     }
 
     const userBar = document.querySelector('.user-bar');
@@ -472,7 +530,13 @@ document.addEventListener('DOMContentLoaded', () => {
     closeReactionPicker();
   });
 
-  renderUserBar();
+  // Bootstrap gating: show splash or main app based on session
+  initLoginSplash();
+  if (isSplashVisible) {
+    showLoginSplash();
+  } else {
+    showMainApp(user);
+  }
 
   // Helper to update sidebar speaking indicator without rebuilding DOM
   function updateSidebarOccupantSpeaking(userId, isSpeaking) {
@@ -592,18 +656,9 @@ document.addEventListener('DOMContentLoaded', () => {
       connBadge.style.background = 'rgba(35, 165, 90, 0.2)';
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const inviteServerId = urlParams.get('invite') || urlParams.get('server');
-
-    socket.emit('user:register', {
-      userId: user.userId,
-      name: user.name,
-      avatarColor: user.avatarColor,
-      avatarUrl: user.avatarUrl,
-      isTelegramVerified: user.isTelegramVerified || false,
-      telegramPhone: user.telegramPhone || null,
-      serverId: inviteServerId || 'friends-hangout'
-    });
+    if (user && !isSplashVisible) {
+      doRegister();
+    }
   });
 
   socket.on('disconnect', () => {
@@ -2143,7 +2198,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnPttKeybind = document.getElementById('btn-ptt-keybind');
   const pttKeybindText = document.getElementById('ptt-keybind-text');
 
-  let selectedProfileColor = user.avatarColor;
+  let selectedProfileColor = (user && user.avatarColor) || '#5865F2';
 
   function updateAvatarPreview(imgUrl, color, name) {
     if (imgUrl) {
@@ -2155,7 +2210,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       avatarPreviewImg.style.display = 'none';
       avatarPreviewText.style.display = 'block';
-      avatarPreviewText.textContent = (name || user.name).charAt(0).toUpperCase();
+      avatarPreviewText.textContent = (name || (user && user.name) || 'U').charAt(0).toUpperCase();
       avatarPreviewBox.style.backgroundColor = color || selectedProfileColor;
       btnRemoveAvatar.style.display = 'none';
     }
@@ -2260,10 +2315,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Input mode setup
     currentInputMode = voiceManager.inputMode || 'vad';
     currentPttKey = voiceManager.pttKey || 'Space';
-    optModeVad.classList.toggle('selected', currentInputMode === 'vad');
-    optModePtt.classList.toggle('selected', currentInputMode === 'ptt');
-    pttKeybindGroup.style.display = currentInputMode === 'ptt' ? 'block' : 'none';
-    pttKeybindText.textContent = currentPttKey;
+    if (optModeVad) optModeVad.classList.toggle('selected', currentInputMode === 'vad');
+    if (optModePtt) optModePtt.classList.toggle('selected', currentInputMode === 'ptt');
+    if (pttKeybindGroup) pttKeybindGroup.style.display = currentInputMode === 'ptt' ? 'block' : 'none';
+    if (pttKeybindText) pttKeybindText.textContent = currentPttKey;
 
     // Sensitivity controls setup
     if (chkAutoSens && manualSensRow && sliderSensGate && gateMarker && gateVal) {
@@ -2316,38 +2371,44 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAvatarPreview(null, selectedProfileColor, document.getElementById('input-profile-name').value);
   };
 
-  optModeVad.onclick = () => {
-    currentInputMode = 'vad';
-    optModeVad.classList.add('selected');
-    optModePtt.classList.remove('selected');
-    pttKeybindGroup.style.display = 'none';
-  };
-
-  optModePtt.onclick = () => {
-    currentInputMode = 'ptt';
-    optModePtt.classList.add('selected');
-    optModeVad.classList.remove('selected');
-    pttKeybindGroup.style.display = 'block';
-  };
-
-  btnPttKeybind.onclick = () => {
-    isRecordingPttKey = true;
-    btnPttKeybind.classList.add('recording');
-    pttKeybindText.textContent = 'Press any key...';
-
-    const onKeyRecord = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const recorded = (e.code === 'Space') ? 'Space' : ((e.code === 'CapsLock' || e.key === 'CapsLock') ? 'CapsLock' : (e.key.length === 1 ? e.key.toUpperCase() : e.key));
-      currentPttKey = recorded;
-      pttKeybindText.textContent = currentPttKey;
-      btnPttKeybind.classList.remove('recording');
-      isRecordingPttKey = false;
-      window.removeEventListener('keydown', onKeyRecord, true);
+  if (optModeVad) {
+    optModeVad.onclick = () => {
+      currentInputMode = 'vad';
+      optModeVad.classList.add('selected');
+      if (optModePtt) optModePtt.classList.remove('selected');
+      if (pttKeybindGroup) pttKeybindGroup.style.display = 'none';
     };
+  }
 
-    window.addEventListener('keydown', onKeyRecord, true);
-  };
+  if (optModePtt) {
+    optModePtt.onclick = () => {
+      currentInputMode = 'ptt';
+      optModePtt.classList.add('selected');
+      if (optModeVad) optModeVad.classList.remove('selected');
+      if (pttKeybindGroup) pttKeybindGroup.style.display = 'block';
+    };
+  }
+
+  if (btnPttKeybind) {
+    btnPttKeybind.onclick = () => {
+      isRecordingPttKey = true;
+      btnPttKeybind.classList.add('recording');
+      if (pttKeybindText) pttKeybindText.textContent = 'Press any key...';
+
+      const onKeyRecord = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const recorded = (e.code === 'Space') ? 'Space' : ((e.code === 'CapsLock' || e.key === 'CapsLock') ? 'CapsLock' : (e.key.length === 1 ? e.key.toUpperCase() : e.key));
+        currentPttKey = recorded;
+        if (pttKeybindText) pttKeybindText.textContent = currentPttKey;
+        btnPttKeybind.classList.remove('recording');
+        isRecordingPttKey = false;
+        window.removeEventListener('keydown', onKeyRecord, true);
+      };
+
+      window.addEventListener('keydown', onKeyRecord, true);
+    };
+  }
 
   document.querySelectorAll('.color-dot').forEach(dot => {
     dot.onclick = () => {
@@ -2504,7 +2565,7 @@ document.addEventListener('DOMContentLoaded', () => {
       streamQualityCards.forEach(c => {
         c.classList.toggle('selected', c.dataset.quality === currentStreamQuality);
       });
-      syncTelegramSettingsStatus();
+      syncTelegramAccountSection();
       if (origBtnUserSettingsClick) origBtnUserSettingsClick();
     };
   }
@@ -2798,298 +2859,219 @@ document.addEventListener('DOMContentLoaded', () => {
   initQuickSwitcher();
 
   // ==========================================================================
-  // Feature 7: Telegram Sign-In with Phone Number Verification
+  // Telegram Login Splash Handler
   // ==========================================================================
-  const modalTelegramAuth = document.getElementById('modal-telegram-auth');
-  const btnTelegramAuth = document.getElementById('btn-telegram-auth');
-  const btnSettingsTelegramAction = document.getElementById('btn-settings-telegram-action');
-  const tgStepPhone = document.getElementById('tg-step-phone');
-  const tgStepCode = document.getElementById('tg-step-code');
-  const inputTelegramPhone = document.getElementById('input-telegram-phone');
-  const inputTelegramCode = document.getElementById('input-telegram-code');
-  const tgPhoneError = document.getElementById('tg-phone-error');
-  const tgCodeError = document.getElementById('tg-code-error');
-  const tgTargetPhoneDisplay = document.getElementById('tg-target-phone-display');
-  const btnTgPrimaryAction = document.getElementById('btn-tg-primary-action');
-  const btnTgChangePhone = document.getElementById('btn-tg-change-phone');
-  const btnTgResend = document.getElementById('btn-tg-resend');
-  const tgCountdownSec = document.getElementById('tg-countdown-sec');
-  const tgTimerText = document.getElementById('tg-timer-text');
-  const tgDevCodePill = document.getElementById('tg-dev-code-pill');
-  const tgDevCodeVal = document.getElementById('tg-dev-code-val');
-  const btnTgCopyDevCode = document.getElementById('btn-tg-copy-dev-code');
+  function initLoginSplash() {
+    const btnOneClick     = document.getElementById('btn-tg-oneclick');
+    const sessionCodeEl   = document.getElementById('tg-session-code');
+    const botLinkEl       = document.getElementById('tg-bot-link');
 
-  let tgCurrentStep = 'phone';
-  let tgCurrentPhone = '';
-  let tgResendInterval = null;
+    const stepUsername    = document.getElementById('tg-step-username');
+    const stepCode        = document.getElementById('tg-step-code');
+    const inputUsername   = document.getElementById('tg-input-username');
+    const btnSendCode     = document.getElementById('btn-tg-send-code');
+    const usernameError   = document.getElementById('tg-username-error');
+    const displayTarget   = document.getElementById('tg-display-target');
+    const inputCode       = document.getElementById('tg-input-code');
+    const btnVerifyCode   = document.getElementById('btn-tg-verify-code');
+    const codeError       = document.getElementById('tg-code-error');
+    const btnResend       = document.getElementById('btn-tg-resend');
+    const resendTimer     = document.getElementById('tg-resend-timer');
+    const resendCountdown = document.getElementById('tg-resend-countdown');
+    const btnChangeUser   = document.getElementById('btn-tg-change-user');
 
-  function syncTelegramSettingsStatus() {
-    const tgSettingsStatusTitle = document.getElementById('tg-settings-status-title');
-    const tgSettingsStatusDesc = document.getElementById('tg-settings-status-desc');
-    const btnAct = document.getElementById('btn-settings-telegram-action');
-    if (!tgSettingsStatusTitle || !btnAct) return;
+    let currentTargetUsername = '';
+    let resendInterval = null;
 
-    if (user.isTelegramVerified) {
-      tgSettingsStatusTitle.textContent = `Connected (${user.telegramPhone || 'Verified'})`;
-      if (tgSettingsStatusDesc) tgSettingsStatusDesc.textContent = 'Your account is linked with Telegram.';
-      btnAct.textContent = 'Unlink';
-      btnAct.style.backgroundColor = 'rgba(242, 63, 67, 0.15)';
-      btnAct.style.color = '#f23f43';
-      btnAct.style.border = 'none';
-    } else {
-      tgSettingsStatusTitle.textContent = 'Not Connected';
-      if (tgSettingsStatusDesc) tgSettingsStatusDesc.textContent = 'Link your phone number to receive official Telegram verification.';
-      btnAct.textContent = 'Sign In';
-      btnAct.style.backgroundColor = '#24a1de';
-      btnAct.style.color = '#ffffff';
-      btnAct.style.border = 'none';
-    }
-  }
-
-  function openTelegramAuthModal() {
-    tgCurrentStep = 'phone';
-    tgCurrentPhone = '';
-    if (tgStepPhone) tgStepPhone.style.display = 'block';
-    if (tgStepCode) tgStepCode.style.display = 'none';
-    if (tgPhoneError) tgPhoneError.style.display = 'none';
-    if (tgCodeError) tgCodeError.style.display = 'none';
-    if (inputTelegramPhone) {
-      inputTelegramPhone.value = user.telegramPhone || '';
-    }
-    if (inputTelegramCode) inputTelegramCode.value = '';
-    if (btnTgPrimaryAction) {
-      btnTgPrimaryAction.textContent = 'Send Code';
-      btnTgPrimaryAction.disabled = false;
-    }
-    if (tgDevCodePill) tgDevCodePill.style.display = 'none';
-    if (tgResendInterval) clearInterval(tgResendInterval);
-
-    openModal(modalTelegramAuth);
-    setTimeout(() => {
-      if (inputTelegramPhone) inputTelegramPhone.focus();
-    }, 100);
-  }
-
-  function startTgResendCountdown() {
-    if (tgResendInterval) clearInterval(tgResendInterval);
-    let secondsLeft = 60;
-    if (tgCountdownSec) tgCountdownSec.textContent = secondsLeft;
-    if (tgTimerText) tgTimerText.style.display = 'inline';
-    if (btnTgResend) btnTgResend.style.display = 'none';
-
-    tgResendInterval = setInterval(() => {
-      secondsLeft--;
-      if (tgCountdownSec) tgCountdownSec.textContent = secondsLeft;
-      if (secondsLeft <= 0) {
-        clearInterval(tgResendInterval);
-        if (tgTimerText) tgTimerText.style.display = 'none';
-        if (btnTgResend) btnTgResend.style.display = 'inline-block';
+    // Request active 1-click Telegram Bot session
+    function requestBotSession() {
+      if (socket && socket.connected) {
+        socket.emit('auth:bot:request_session');
       }
-    }, 1000);
-  }
+    }
 
-  function handleTgSendCode() {
-    if (!inputTelegramPhone) return;
-    const phone = inputTelegramPhone.value.trim();
-    if (!phone) {
-      if (tgPhoneError) {
-        tgPhoneError.textContent = 'Please enter your phone number.';
-        tgPhoneError.style.display = 'block';
+    socket.on('connect', () => {
+      if (isSplashVisible) {
+        requestBotSession();
       }
-      return;
-    }
+    });
 
-    if (tgPhoneError) tgPhoneError.style.display = 'none';
-    if (btnTgPrimaryAction) {
-      btnTgPrimaryAction.textContent = 'Sending...';
-      btnTgPrimaryAction.disabled = true;
-    }
-
-    socket.emit('auth:telegram:send_code', { phone });
-  }
-
-  function handleTgVerifyCode() {
-    if (!inputTelegramCode) return;
-    const code = inputTelegramCode.value.trim();
-    if (!code || code.length < 5) {
-      if (tgCodeError) {
-        tgCodeError.textContent = 'Please enter the 6-digit code sent to your Telegram.';
-        tgCodeError.style.display = 'block';
+    socket.on('auth:bot:session_created', (data) => {
+      if (btnOneClick && data.botUrl) {
+        btnOneClick.href = data.botUrl;
       }
-      return;
+      if (sessionCodeEl && data.code) {
+        sessionCodeEl.textContent = data.code;
+      }
+      if (botLinkEl && data.botUsername) {
+        botLinkEl.href = 'https://t.me/' + data.botUsername;
+        botLinkEl.textContent = '@' + data.botUsername;
+      }
+    });
+
+    if (isSplashVisible) {
+      requestBotSession();
     }
 
-    if (tgCodeError) tgCodeError.style.display = 'none';
-    if (btnTgPrimaryAction) {
-      btnTgPrimaryAction.textContent = 'Verifying...';
-      btnTgPrimaryAction.disabled = true;
+    function goToStep(step) {
+      if (step === 'username') {
+        if (stepUsername) stepUsername.style.display = 'flex';
+        if (stepCode) stepCode.style.display = 'none';
+        if (btnSendCode) { btnSendCode.textContent = 'Send Verification Code'; btnSendCode.disabled = false; }
+        if (inputUsername) inputUsername.focus();
+      } else {
+        if (stepUsername) stepUsername.style.display = 'none';
+        if (stepCode) stepCode.style.display = 'flex';
+        if (btnVerifyCode) { btnVerifyCode.textContent = 'Verify & Sign In'; btnVerifyCode.disabled = false; }
+        if (inputCode) { inputCode.value = ''; inputCode.focus(); }
+      }
     }
 
-    socket.emit('auth:telegram:verify_code', { phone: tgCurrentPhone, code });
-  }
-
-  if (btnTelegramAuth) {
-    btnTelegramAuth.onclick = () => {
-      openTelegramAuthModal();
-    };
-  }
-
-  if (btnSettingsTelegramAction) {
-    btnSettingsTelegramAction.onclick = () => {
-      if (user.isTelegramVerified) {
-        if (confirm('Are you sure you want to unlink your Telegram account?')) {
-          socket.emit('auth:telegram:unlink');
+    function startCountdown() {
+      if (resendInterval) clearInterval(resendInterval);
+      let secs = 60;
+      if (resendCountdown) resendCountdown.textContent = secs;
+      if (resendTimer) resendTimer.style.display = 'inline';
+      if (btnResend) btnResend.style.display = 'none';
+      resendInterval = setInterval(() => {
+        secs--;
+        if (resendCountdown) resendCountdown.textContent = secs;
+        if (secs <= 0) {
+          clearInterval(resendInterval);
+          if (resendTimer) resendTimer.style.display = 'none';
+          if (btnResend) btnResend.style.display = 'inline-block';
         }
-      } else {
-        closeModal(modalProfile);
-        openTelegramAuthModal();
-      }
-    };
-  }
+      }, 1000);
+    }
 
-  if (btnTgPrimaryAction) {
-    btnTgPrimaryAction.onclick = () => {
-      if (tgCurrentStep === 'phone') {
-        handleTgSendCode();
-      } else {
-        handleTgVerifyCode();
+    function doSendCode() {
+      const username = inputUsername ? inputUsername.value.trim() : '';
+      if (!username) {
+        if (usernameError) {
+          usernameError.textContent = 'Please enter your Telegram username (e.g. @your_username)';
+          usernameError.style.display = 'block';
+        }
+        return;
       }
-    };
-  }
+      if (usernameError) usernameError.style.display = 'none';
 
-  if (inputTelegramPhone) {
-    inputTelegramPhone.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleTgSendCode();
+      if (!socket || !socket.connected) {
+        if (usernameError) {
+          usernameError.textContent = 'Connecting to server... Please try again in a moment.';
+          usernameError.style.display = 'block';
+        }
+        return;
       }
+
+      if (btnSendCode) { btnSendCode.textContent = 'Sending code...'; btnSendCode.disabled = true; }
+      currentTargetUsername = username.replace(/^@/, '');
+      console.log('[Telegram Auth] Requesting code for:', currentTargetUsername);
+      socket.emit('auth:telegram:send_code', { username: currentTargetUsername });
+
+      setTimeout(() => {
+        if (btnSendCode && btnSendCode.disabled && btnSendCode.textContent === 'Sending code...') {
+          btnSendCode.textContent = 'Send Verification Code';
+          btnSendCode.disabled = false;
+        }
+      }, 8000);
+    }
+
+    function doVerifyCode() {
+      const codeVal = inputCode ? inputCode.value.trim() : '';
+      if (!codeVal || codeVal.length < 5) {
+        if (codeError) {
+          codeError.textContent = 'Please enter the 6-digit verification code from Telegram.';
+          codeError.style.display = 'block';
+        }
+        return;
+      }
+      if (codeError) codeError.style.display = 'none';
+
+      if (!socket || !socket.connected) {
+        if (codeError) {
+          codeError.textContent = 'Connection lost. Reconnecting... Please try again.';
+          codeError.style.display = 'block';
+        }
+        return;
+      }
+
+      if (btnVerifyCode) { btnVerifyCode.textContent = 'Verifying...'; btnVerifyCode.disabled = true; }
+      socket.emit('auth:telegram:verify_code', { username: currentTargetUsername, code: codeVal });
+
+      setTimeout(() => {
+        if (btnVerifyCode && btnVerifyCode.disabled && btnVerifyCode.textContent === 'Verifying...') {
+          btnVerifyCode.textContent = 'Verify & Sign In';
+          btnVerifyCode.disabled = false;
+        }
+      }, 8000);
+    }
+
+    if (btnSendCode) btnSendCode.onclick = doSendCode;
+    if (inputUsername) {
+      inputUsername.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); doSendCode(); }
+      });
+    }
+
+    if (btnVerifyCode) btnVerifyCode.onclick = doVerifyCode;
+    if (inputCode) {
+      inputCode.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); doVerifyCode(); }
+      });
+      inputCode.addEventListener('input', () => {
+        const cleaned = inputCode.value.replace(/\D/g, '');
+        inputCode.value = cleaned;
+        if (cleaned.length === 6) doVerifyCode();
+      });
+    }
+
+    if (btnChangeUser) {
+      btnChangeUser.onclick = () => {
+        if (resendInterval) clearInterval(resendInterval);
+        goToStep('username');
+      };
+    }
+
+    if (btnResend) {
+      btnResend.onclick = doSendCode;
+    }
+
+    socket.on('auth:telegram:code_sent', (data) => {
+      if (displayTarget) displayTarget.textContent = data.target || ('@' + currentTargetUsername);
+      goToStep('code');
+      startCountdown();
+      showToast('Verification code sent to your Telegram!');
+    });
+
+    socket.on('auth:telegram:send_code_error', (data) => {
+      if (btnSendCode) { btnSendCode.textContent = 'Send Verification Code'; btnSendCode.disabled = false; }
+      if (usernameError) {
+        if (data.needStart && data.botUrl) {
+          usernameError.innerHTML = 'The bot cannot message you yet! Please tap <a href="' + data.botUrl + '" target="_blank" style="color: #24a1de; font-weight: bold; text-decoration: underline;">@Cordlite_bot</a> to start it in Telegram, or click <b>"Open Telegram to Sign In"</b> above.';
+        } else {
+          usernameError.textContent = data.message || 'Failed to send code.';
+        }
+        usernameError.style.display = 'block';
+      }
+    });
+
+    socket.on('auth:telegram:verify_error', (data) => {
+      if (btnVerifyCode) { btnVerifyCode.textContent = 'Verify & Sign In'; btnVerifyCode.disabled = false; }
+      if (codeError) {
+        codeError.textContent = data.message || 'Incorrect code.';
+        codeError.style.display = 'block';
+      }
+    });
+
+    socket.on('auth:telegram:success', (data) => {
+      const verifiedUser = data.user;
+      verifiedUser.isTelegramVerified = true;
+      localStorage.setItem('cordlite_user', JSON.stringify(verifiedUser));
+      if (resendInterval) clearInterval(resendInterval);
+      showMainApp(verifiedUser);
+      showToast('Welcome, ' + verifiedUser.name + '!');
     });
   }
 
-  if (inputTelegramCode) {
-    inputTelegramCode.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleTgVerifyCode();
-      }
-    });
-    inputTelegramCode.addEventListener('input', () => {
-      const val = inputTelegramCode.value.trim().replace(/\D/g, '');
-      inputTelegramCode.value = val;
-      if (val.length === 6) {
-        handleTgVerifyCode();
-      }
-    });
-  }
-
-  if (btnTgChangePhone) {
-    btnTgChangePhone.onclick = () => {
-      tgCurrentStep = 'phone';
-      if (tgStepPhone) tgStepPhone.style.display = 'block';
-      if (tgStepCode) tgStepCode.style.display = 'none';
-      if (btnTgPrimaryAction) {
-        btnTgPrimaryAction.textContent = 'Send Code';
-        btnTgPrimaryAction.disabled = false;
-      }
-      if (tgCodeError) tgCodeError.style.display = 'none';
-      if (inputTelegramPhone) inputTelegramPhone.focus();
-    };
-  }
-
-  if (btnTgResend) {
-    btnTgResend.onclick = () => {
-      handleTgSendCode();
-    };
-  }
-
-  if (btnTgCopyDevCode && inputTelegramCode) {
-    btnTgCopyDevCode.onclick = () => {
-      if (tgDevCodeVal && tgDevCodeVal.textContent) {
-        inputTelegramCode.value = tgDevCodeVal.textContent.trim();
-        handleTgVerifyCode();
-      }
-    };
-  }
-
-  // Socket: Code Sent
-  socket.on('auth:telegram:code_sent', (data) => {
-    tgCurrentStep = 'code';
-    tgCurrentPhone = data.phone;
-    if (tgStepPhone) tgStepPhone.style.display = 'none';
-    if (tgStepCode) tgStepCode.style.display = 'block';
-    if (tgTargetPhoneDisplay) tgTargetPhoneDisplay.textContent = data.phone;
-    if (btnTgPrimaryAction) {
-      btnTgPrimaryAction.textContent = 'Verify Code';
-      btnTgPrimaryAction.disabled = false;
-    }
-    if (inputTelegramCode) {
-      inputTelegramCode.value = '';
-      inputTelegramCode.focus();
-    }
-    if (data.devMode && tgDevCodePill && tgDevCodeVal) {
-      tgDevCodeVal.textContent = data.devCode;
-      tgDevCodePill.style.display = 'flex';
-    } else if (tgDevCodePill) {
-      tgDevCodePill.style.display = 'none';
-    }
-    startTgResendCountdown();
-    showToast(`Code sent to Telegram for ${data.phone}`);
-  });
-
-  // Socket: Send Code Error
-  socket.on('auth:telegram:send_code_error', (data) => {
-    if (btnTgPrimaryAction) {
-      btnTgPrimaryAction.textContent = 'Send Code';
-      btnTgPrimaryAction.disabled = false;
-    }
-    if (tgPhoneError) {
-      tgPhoneError.textContent = data.message || 'Failed to send code.';
-      tgPhoneError.style.display = 'block';
-    }
-  });
-
-  // Socket: Verify Success
-  socket.on('auth:telegram:success', (data) => {
-    const verifiedUser = data.user;
-    user.isTelegramVerified = true;
-    user.telegramPhone = verifiedUser.telegramPhone;
-    if (verifiedUser.name && user.name.startsWith('User')) {
-      user.name = verifiedUser.name;
-    }
-    if (verifiedUser.avatarColor) {
-      user.avatarColor = verifiedUser.avatarColor;
-    }
-    localStorage.setItem('cordlite_user', JSON.stringify(user));
-
-    renderUserBar();
-    renderMembers();
-    syncTelegramSettingsStatus();
-    closeModal(modalTelegramAuth);
-    if (tgResendInterval) clearInterval(tgResendInterval);
-
-    showToast(`Signed in with Telegram (${verifiedUser.telegramPhone})!`);
-  });
-
-  // Socket: Verify Error
-  socket.on('auth:telegram:verify_error', (data) => {
-    if (btnTgPrimaryAction) {
-      btnTgPrimaryAction.textContent = 'Verify Code';
-      btnTgPrimaryAction.disabled = false;
-    }
-    if (tgCodeError) {
-      tgCodeError.textContent = data.message || 'Incorrect verification code.';
-      tgCodeError.style.display = 'block';
-    }
-  });
-
-  // Socket: Unlinked
-  socket.on('auth:telegram:unlinked', () => {
-    user.isTelegramVerified = false;
-    user.telegramPhone = null;
-    localStorage.setItem('cordlite_user', JSON.stringify(user));
-    renderUserBar();
-    renderMembers();
-    syncTelegramSettingsStatus();
-    showToast('Telegram account unlinked.');
-  });
+  initLoginSplash();
 });

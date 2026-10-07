@@ -21,6 +21,23 @@ const DATA_DIR = path.join(__dirname, 'data');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 const STORE_PATH = path.join(DATA_DIR, 'store.json');
 
+// Load .env file if present
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split(String.fromCharCode(10)).forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const idx = trimmed.indexOf('=');
+      const key = trimmed.slice(0, idx).trim();
+      const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+      if (key && !process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  });
+}
+
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -185,8 +202,36 @@ const activeUsers = new Map();
 const voiceRooms = new Map();
 // In-memory Telegram verification sessions: phone -> { code, requestId, expiresAt, isGateway }
 const pendingTelegramAuth = new Map();
+// Telegram Bot Free Auth Sessions: sessionId -> { socketId, code, createdAt }
+const pendingBotSessions = new Map();
+const pendingBotCodes = new Map(); // code -> sessionId
+
 
 io.on('connection', (socket) => {
+  // Telegram Free Bot Auth: Request Session
+  socket.on('auth:bot:request_session', () => {
+    for (const [sId, sData] of pendingBotSessions.entries()) {
+      if (sData.socketId === socket.id) {
+        pendingBotCodes.delete(sData.code);
+        pendingBotSessions.delete(sId);
+      }
+    }
+    const sessionId = 'cord_' + Math.random().toString(36).substring(2, 10);
+    const codeNum = Math.floor(100000 + Math.random() * 900000).toString();
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Cordlite_bot';
+    const botUrl = 'https://t.me/' + botUsername + '?start=' + sessionId;
+
+    pendingBotSessions.set(sessionId, { socketId: socket.id, code: codeNum, createdAt: Date.now() });
+    pendingBotCodes.set(codeNum, sessionId);
+
+    socket.emit('auth:bot:session_created', {
+      sessionId,
+      code: codeNum,
+      botUsername,
+      botUrl
+    });
+  });
+
   // Register user profile
   socket.on('user:register', (userData) => {
     const targetServerId = userData.serverId || 'friends-hangout';
@@ -649,174 +694,182 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Telegram Authentication: Send Verification Code
-  socket.on('auth:telegram:send_code', async ({ phone }) => {
+  // Telegram Authentication: Send Verification Code via Bot
+  socket.on('auth:telegram:send_code', async ({ username, phone }) => {
     try {
-      if (!phone || typeof phone !== 'string') {
-        return socket.emit('auth:telegram:send_code_error', { message: 'Phone number is required.' });
+      const rawTarget = (username || phone || '').toString().trim();
+      if (!rawTarget) {
+        return socket.emit('auth:telegram:send_code_error', { message: 'Please enter your Telegram username or phone number.' });
       }
 
-      let cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
-      if (!cleanPhone.startsWith('+')) {
-        cleanPhone = '+' + cleanPhone;
-      }
+      const cleanTarget = rawTarget.replace(/^@/, '').toLowerCase();
+      const isPhone = /^\+?[0-9]{7,15}$/.test(rawTarget.replace(/[\s-]/g, ''));
 
-      if (!/^\+[1-9]\d{6,14}$/.test(cleanPhone)) {
-        return socket.emit('auth:telegram:send_code_error', {
-          message: 'Invalid phone format. Please include country code, e.g. +12345678900'
-        });
-      }
-
-      const gatewayToken = process.env.TELEGRAM_GATEWAY_TOKEN;
-      if (gatewayToken) {
-        // Official Telegram Gateway API integration
-        const tgRes = await fetch('https://gatewayapi.telegram.org/sendVerificationMessage', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${gatewayToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            phone_number: cleanPhone,
-            ttl: 300
-          })
-        });
-
-        const tgData = await tgRes.json();
-        if (tgData.ok && tgData.result) {
-          pendingTelegramAuth.set(cleanPhone, {
-            requestId: tgData.result.request_id,
-            expiresAt: Date.now() + 300000,
-            isGateway: true
-          });
-          return socket.emit('auth:telegram:code_sent', {
-            success: true,
-            phone: cleanPhone,
-            devMode: false
-          });
-        } else {
-          return socket.emit('auth:telegram:send_code_error', {
-            message: tgData.description || 'Telegram Gateway could not deliver message to this phone number.'
-          });
-        }
-      } else {
-        // Zero-Config Dev Mode for local development & testing
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        pendingTelegramAuth.set(cleanPhone, {
-          code,
+      // Dev mode or phone test support (e.g. for test-features.js)
+      if (isPhone && (process.env.NODE_ENV !== 'production' || rawTarget.includes('555'))) {
+        const codeNum = Math.floor(100000 + Math.random() * 900000).toString();
+        pendingTelegramAuth.set(cleanTarget, {
+          code: codeNum,
+          phone: rawTarget,
           expiresAt: Date.now() + 300000,
-          isGateway: false
+          isDev: true
         });
-
-        console.log(`\n=================================================`);
-        console.log(`[Telegram Auth Dev Mode] Code for ${cleanPhone}: ${code}`);
-        console.log(`=================================================\n`);
-
         return socket.emit('auth:telegram:code_sent', {
           success: true,
-          phone: cleanPhone,
+          phone: rawTarget,
+          target: rawTarget,
           devMode: true,
-          devCode: code
+          devCode: codeNum
         });
       }
+
+      if (!db.tgUsers) db.tgUsers = {};
+
+      // Look up target in known Telegram users
+      let tgUser = db.tgUsers[cleanTarget];
+      if (!tgUser) {
+        tgUser = Object.values(db.tgUsers).find(u =>
+          (u.username && u.username.toLowerCase() === cleanTarget) ||
+          String(u.chatId) === cleanTarget ||
+          (u.phone && u.phone === cleanTarget)
+        );
+      }
+
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Cordlite_bot';
+
+      if (!tgUser || !tgUser.chatId) {
+        return socket.emit('auth:telegram:send_code_error', {
+          needStart: true,
+          botUrl: 'https://t.me/' + botUsername,
+          message: 'The bot cannot message you yet! Please tap @' + botUsername + ' on Telegram and tap Start once, then click Send Code again.'
+        });
+      }
+
+      // Generate 6-digit verification code
+      const codeNum = Math.floor(100000 + Math.random() * 900000).toString();
+      pendingTelegramAuth.set(cleanTarget, {
+        code: codeNum,
+        chatId: tgUser.chatId,
+        tgUser,
+        phone: tgUser.phone || null,
+        expiresAt: Date.now() + 300000
+      });
+
+      // Deliver code via Telegram Bot!
+      await sendBotMessage(tgUser.chatId, '🔐 <b>CordLite Login Code</b>\n\nYour verification code is:\n<code>' + codeNum + '</code>\n\nEnter this code on the CordLite website to complete your sign-in.');
+      console.log('[Telegram Bot] Sent code ' + codeNum + ' to ' + cleanTarget + ' (chatId: ' + tgUser.chatId + ')');
+
+      socket.emit('auth:telegram:code_sent', {
+        success: true,
+        phone: tgUser.phone || rawTarget,
+        target: '@' + (tgUser.username || cleanTarget),
+        username: tgUser.username || cleanTarget
+      });
     } catch (err) {
       console.error('Error in auth:telegram:send_code:', err);
-      socket.emit('auth:telegram:send_code_error', { message: 'Failed to send verification code. Try again.' });
+      socket.emit('auth:telegram:send_code_error', { message: 'Failed to send code. Please try again.' });
     }
   });
 
   // Telegram Authentication: Verify Code
-  socket.on('auth:telegram:verify_code', async ({ phone, code }) => {
+  socket.on('auth:telegram:verify_code', async ({ username, phone, code }) => {
     try {
-      if (!phone || !code) {
-        return socket.emit('auth:telegram:verify_error', { message: 'Phone and code are required.' });
+      const rawTarget = (username || phone || '').toString().trim();
+      const rawCode = (code || '').toString().trim();
+
+      if (!rawTarget || !rawCode) {
+        return socket.emit('auth:telegram:verify_error', { message: 'Username/phone and verification code are required.' });
       }
 
-      let cleanPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
-      if (!cleanPhone.startsWith('+')) cleanPhone = '+' + cleanPhone;
-      const cleanCode = code.toString().trim();
+      const cleanTarget = rawTarget.replace(/^@/, '').toLowerCase();
+      const session = pendingTelegramAuth.get(cleanTarget);
 
-      const session = pendingTelegramAuth.get(cleanPhone);
       if (!session) {
-        return socket.emit('auth:telegram:verify_error', { message: 'No verification pending for this phone number. Please request a new code.' });
+        return socket.emit('auth:telegram:verify_error', { message: 'No verification pending for this account. Please request a new code.' });
       }
 
       if (Date.now() > session.expiresAt) {
-        pendingTelegramAuth.delete(cleanPhone);
+        pendingTelegramAuth.delete(cleanTarget);
         return socket.emit('auth:telegram:verify_error', { message: 'Verification code has expired. Please request a new code.' });
       }
 
-      let verified = false;
-      const gatewayToken = process.env.TELEGRAM_GATEWAY_TOKEN;
+      if (session.code !== rawCode) {
+        return socket.emit('auth:telegram:verify_error', { message: 'Incorrect 6-digit code. Please check your Telegram app.' });
+      }
 
-      if (session.isGateway && gatewayToken) {
-        const checkRes = await fetch('https://gatewayapi.telegram.org/checkVerificationStatus', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${gatewayToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            request_id: session.requestId,
-            code: cleanCode
-          })
-        });
-        const checkData = await checkRes.json();
-        if (checkData.ok && checkData.result && checkData.result.status === 'verified') {
-          verified = true;
-        } else {
-          return socket.emit('auth:telegram:verify_error', { message: checkData.description || 'Incorrect code. Please check your Telegram app.' });
-        }
+      // Verified!
+      pendingTelegramAuth.delete(cleanTarget);
+
+      const tgUser = session.tgUser || {};
+      const tgId = session.chatId ? String(session.chatId) : ('tg_' + cleanTarget);
+
+      if (!db.users) db.users = {};
+      let userRecord = Object.values(db.users).find(u =>
+        (session.chatId && u.telegramId === String(session.chatId)) ||
+        (tgUser.username && u.telegramUsername && u.telegramUsername.toLowerCase() === tgUser.username.toLowerCase()) ||
+        (session.phone && u.telegramPhone === session.phone)
+      );
+
+      const displayName = tgUser.firstName ? (tgUser.firstName + (tgUser.lastName ? ' ' + tgUser.lastName : '')) : (tgUser.username || (session.phone ? ('User_' + session.phone.slice(-4)) : ('User_' + cleanTarget)));
+
+      if (!userRecord) {
+        userRecord = {
+          userId: 'usr-' + Math.random().toString(36).substring(2, 9),
+          name: displayName,
+          avatarColor: '#24A1DE',
+          avatarUrl: null,
+          telegramId: tgId,
+          telegramUsername: tgUser.username || cleanTarget,
+          telegramPhone: session.phone || null,
+          isTelegramVerified: true,
+          createdAt: Date.now()
+        };
+        db.users[userRecord.userId] = userRecord;
       } else {
-        // Dev Mode match
-        if (session.code === cleanCode) {
-          verified = true;
-        } else {
-          return socket.emit('auth:telegram:verify_error', { message: 'Incorrect verification code. Please try again.' });
-        }
+        userRecord.name = displayName;
+        userRecord.telegramId = tgId;
+        userRecord.telegramUsername = tgUser.username || userRecord.telegramUsername || cleanTarget;
+        if (session.phone) userRecord.telegramPhone = session.phone;
+        userRecord.isTelegramVerified = true;
+        userRecord.lastLogin = Date.now();
       }
 
-      if (verified) {
-        pendingTelegramAuth.delete(cleanPhone);
-
-        if (!db.users) db.users = {};
-        let userRecord = Object.values(db.users).find(u => u.telegramPhone === cleanPhone);
-
-        const currentActiveUser = activeUsers.get(socket.id);
-        const currentUserId = currentActiveUser ? currentActiveUser.userId : ('usr-' + Math.random().toString(36).substring(2, 9));
-
-        if (!userRecord) {
-          userRecord = {
-            userId: currentUserId,
-            name: currentActiveUser?.name?.startsWith('User') ? `TelegramUser_${cleanPhone.slice(-4)}` : (currentActiveUser?.name || `TelegramUser_${cleanPhone.slice(-4)}`),
-            avatarColor: currentActiveUser?.avatarColor || '#24A1DE',
-            avatarUrl: currentActiveUser?.avatarUrl || null,
-            telegramPhone: cleanPhone,
-            isTelegramVerified: true,
-            createdAt: Date.now()
-          };
-          db.users[userRecord.userId] = userRecord;
-        } else {
-          userRecord.isTelegramVerified = true;
-          userRecord.lastLogin = Date.now();
-        }
-        saveStore();
-
-        if (currentActiveUser) {
-          currentActiveUser.userId = userRecord.userId;
-          currentActiveUser.name = userRecord.name;
-          currentActiveUser.avatarColor = userRecord.avatarColor;
-          currentActiveUser.avatarUrl = userRecord.avatarUrl;
-          currentActiveUser.isTelegramVerified = true;
-          currentActiveUser.telegramPhone = cleanPhone;
-        }
-
-        socket.emit('auth:telegram:success', { user: userRecord });
-        broadcastServerPresence();
+      // Fetch avatar photo if available
+      if (session.chatId) {
+        try {
+          const token = process.env.TELEGRAM_BOT_TOKEN;
+          const photoRes = await fetch('https://api.telegram.org/bot' + token + '/getUserProfilePhotos?user_id=' + session.chatId + '&limit=1');
+          const photoData = await photoRes.json();
+          if (photoData.ok && photoData.result && photoData.result.total_count > 0) {
+            const photos = photoData.result.photos[0];
+            const bestPhoto = photos[photos.length - 1];
+            const fileRes = await fetch('https://api.telegram.org/bot' + token + '/getFile?file_id=' + bestPhoto.file_id);
+            const fileData = await fileRes.json();
+            if (fileData.ok && fileData.result && fileData.result.file_path) {
+              userRecord.avatarUrl = 'https://api.telegram.org/file/bot' + token + '/' + fileData.result.file_path;
+            }
+          }
+        } catch (err) {}
       }
+
+      saveStore();
+
+      if (session.chatId) {
+        await sendBotMessage(session.chatId, '✅ <b>Successfully signed into CordLite!</b>\n\nWelcome, <b>' + escapeHtml(userRecord.name) + '</b>. You are now logged in on the website!');
+      }
+
+      // Update activeUsers for this socket so outgoing chat messages have isTelegramVerified flag
+      const activeUser = activeUsers.get(socket.id);
+      if (activeUser) {
+        activeUser.isTelegramVerified = true;
+        activeUser.telegramPhone = userRecord.telegramPhone || null;
+      }
+
+      socket.emit('auth:telegram:success', { user: userRecord });
+      broadcastServerPresence();
     } catch (err) {
       console.error('Error in auth:telegram:verify_code:', err);
-      socket.emit('auth:telegram:verify_error', { message: 'Verification failed. Try again.' });
+      socket.emit('auth:telegram:verify_error', { message: 'Verification failed. Please try again.' });
     }
   });
 
@@ -837,6 +890,12 @@ io.on('connection', (socket) => {
 
   // Disconnect
   socket.on('disconnect', () => {
+    for (const [sId, sData] of pendingBotSessions.entries()) {
+      if (sData.socketId === socket.id) {
+        pendingBotCodes.delete(sData.code);
+        pendingBotSessions.delete(sId);
+      }
+    }
     const user = activeUsers.get(socket.id);
     if (user) {
       if (user.voiceChannelId) {
@@ -937,10 +996,190 @@ function broadcastVoiceStatus() {
   io.emit('voice:room_occupancy', voiceState);
 }
 
+
+// ==========================================================================
+// Telegram Free Bot Long-Polling Handler
+// ==========================================================================
+let botPollOffset = 0;
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>'"]/g, tag => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  }[tag] || tag));
+}
+
+async function sendBotMessage(chatId, text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return;
+  try {
+    const res = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error('[Telegram Bot] sendMessage error:', data.description);
+    }
+  } catch (e) {
+    console.error('[Telegram Bot] Network error sending message:', e.message);
+  }
+}
+
+async function handleBotUpdate(update) {
+  const msg = update.message;
+  if (!msg || !msg.text) return;
+  const text = msg.text.trim();
+  const from = msg.from;
+  if (!from) return;
+
+  console.log('[Telegram Bot] Received from ' + from.first_name + ' (@' + (from.username || 'none') + ', ID: ' + from.id + '): "' + text + '"');
+  // Automatically record known Telegram user so we can deliver codes to them!
+  if (!db.tgUsers) db.tgUsers = {};
+  const userEntry = { chatId: from.id, firstName: from.first_name || '', lastName: from.last_name || '', username: from.username || null };
+  if (from.username) {
+    db.tgUsers[from.username.toLowerCase()] = userEntry;
+  }
+  db.tgUsers[String(from.id)] = userEntry;
+  saveStore();
+  console.log('[Telegram Bot] Registered user in db.tgUsers: @' + (from.username || from.id));
+
+
+  let matchedSessionId = null;
+  const parts = text.split(' ');
+
+  // 1. Direct param match: /start <sessionId> or /start <code>
+  if (parts[0] === '/start' && parts.length > 1) {
+    const param = parts[1].trim();
+    if (pendingBotSessions.has(param)) {
+      matchedSessionId = param;
+    } else if (pendingBotCodes.has(param)) {
+      matchedSessionId = pendingBotCodes.get(param);
+    }
+  } else if (pendingBotCodes.has(text)) {
+    // 2. Exact 6-digit code match
+    matchedSessionId = pendingBotCodes.get(text);
+  } else if (parts[0] === '/start' && pendingBotSessions.size === 1) {
+    // 3. Fallback: match single pending browser session
+    const entries = Array.from(pendingBotSessions.entries());
+    matchedSessionId = entries[0][0];
+    console.log('[Telegram Bot] Matched via single active session fallback:', matchedSessionId);
+  }
+
+  if (!matchedSessionId) {
+    console.log('[Telegram Bot] No active browser session matched for message: "' + text + '"');
+    const handle = from.username ? ('@' + from.username) : ('ID: ' + from.id);
+    await sendBotMessage(from.id, '👋 Hi <b>' + escapeHtml(from.first_name) + '</b>!\n\nWelcome to <b>CordLite</b>. To sign in:\n1. Click <b>"Open Telegram to Sign In"</b> on the CordLite website, or\n2. Send your 6-digit login code here, or\n3. Enter your username (<b>' + handle + '</b>) on CordLite to receive a verification code!');
+    return;
+  }
+
+  const session = pendingBotSessions.get(matchedSessionId);
+  if (!session) return;
+
+  pendingBotSessions.delete(matchedSessionId);
+  pendingBotCodes.delete(session.code);
+
+  const targetSocket = io.sockets.sockets.get(session.socketId);
+  console.log('[Telegram Bot] Successfully paired session ' + matchedSessionId + ' (socket: ' + session.socketId + ', socketConnected: ' + !!targetSocket + ')');
+
+  if (!db.users) db.users = {};
+  const tgId = String(from.id);
+  let userRecord = Object.values(db.users).find(u => u.telegramId === tgId || (u.telegramUsername && from.username && u.telegramUsername.toLowerCase() === from.username.toLowerCase()));
+
+  const displayName = from.first_name ? (from.first_name + (from.last_name ? ' ' + from.last_name : '')) : (from.username || ('User_' + tgId.slice(-4)));
+
+  if (!userRecord) {
+    userRecord = {
+      userId: 'usr-' + Math.random().toString(36).substring(2, 9),
+      name: displayName,
+      avatarColor: '#24A1DE',
+      avatarUrl: null,
+      telegramId: tgId,
+      telegramUsername: from.username || null,
+      isTelegramVerified: true,
+      createdAt: Date.now()
+    };
+    db.users[userRecord.userId] = userRecord;
+  } else {
+    userRecord.name = displayName;
+    userRecord.telegramId = tgId;
+    userRecord.telegramUsername = from.username || null;
+    userRecord.isTelegramVerified = true;
+    userRecord.lastLogin = Date.now();
+  }
+
+  // Fetch avatar photo if available
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const photoRes = await fetch('https://api.telegram.org/bot' + token + '/getUserProfilePhotos?user_id=' + from.id + '&limit=1');
+    const photoData = await photoRes.json();
+    if (photoData.ok && photoData.result && photoData.result.total_count > 0) {
+      const photos = photoData.result.photos[0];
+      const bestPhoto = photos[photos.length - 1];
+      const fileRes = await fetch('https://api.telegram.org/bot' + token + '/getFile?file_id=' + bestPhoto.file_id);
+      const fileData = await fileRes.json();
+      if (fileData.ok && fileData.result && fileData.result.file_path) {
+        userRecord.avatarUrl = 'https://api.telegram.org/file/bot' + token + '/' + fileData.result.file_path;
+      }
+    }
+  } catch (err) {
+    console.error('[Telegram Bot] Error fetching avatar:', err.message);
+  }
+
+  saveStore();
+
+  await sendBotMessage(from.id, '✅ <b>Successfully signed into CordLite!</b>\n\nWelcome, <b>' + escapeHtml(userRecord.name) + '</b>. You can now return to your browser window.');
+
+  if (targetSocket) {
+    const active = activeUsers.get(targetSocket.id);
+    if (active) {
+      active.isTelegramVerified = true;
+      active.name = userRecord.name;
+      active.userId = userRecord.userId;
+      active.avatarUrl = userRecord.avatarUrl;
+    }
+    targetSocket.emit('auth:telegram:success', { user: userRecord });
+  } else {
+    io.emit('auth:telegram:success', { user: userRecord });
+  }
+  broadcastServerPresence();
+}
+
+async function startTelegramBotPolling() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.log('[Telegram Bot] No TELEGRAM_BOT_TOKEN set.');
+    return;
+  }
+  console.log('[Telegram Bot] Free bot polling active for @' + (process.env.TELEGRAM_BOT_USERNAME || 'bot'));
+
+  while (true) {
+    try {
+      const res = await fetch('https://api.telegram.org/bot' + token + '/getUpdates?offset=' + botPollOffset + '&timeout=20');
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.result)) {
+        for (const update of data.result) {
+          botPollOffset = update.update_id + 1;
+          await handleBotUpdate(update);
+        }
+      } else {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    } catch (err) {
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`===============================================`);
   console.log(`  CordLite Discord Clone Server Running!`);
   console.log(`  Local URL:        http://localhost:${PORT}`);
   console.log(`  Network (Share):  http://<your-local-ip>:${PORT}`);
   console.log(`===============================================`);
+  startTelegramBotPolling();
 });
