@@ -993,7 +993,7 @@ body {
 /* Voice Grid - Dynamic Auto-fit for voice chats */
 .voice-grid {
   flex: 1 1 0%;
-  padding: 24px;
+  padding: 24px 24px 96px 24px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1017,6 +1017,7 @@ body {
   min-height: 96px;
   max-height: 96px;
   padding: 8px 16px;
+  margin-bottom: 84px;
   overflow-x: auto;
   overflow-y: hidden;
   background: rgba(17, 18, 20, 0.7);
@@ -1191,46 +1192,181 @@ body {
   color: var(--red);
 }
 
-/* Voice Stage Bottom Controls Bar */
+/* ========================================================
+   Voice Stage Bottom Controls - Floating Glassmorphic Dock
+   ======================================================== */
 .voice-stage-controls {
-  height: 64px;
-  background-color: var(--bg-secondary-alt);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 86px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  justify-content: space-between;
+  padding: 0 28px 12px 28px;
+  background: linear-gradient(180deg, rgba(17, 18, 20, 0) 0%, rgba(17, 18, 20, 0.6) 42%, rgba(17, 18, 20, 0.96) 100%);
+  pointer-events: none;
+  z-index: 30;
+  border-top: none;
+  box-sizing: border-box;
 }
 
+/* Left Flank: Invite Friends / Add User */
+.stage-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+  min-width: 110px;
+}
+
+/* Center Dock: Discord Floating Pill Cluster */
+.stage-controls-center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+  background: rgba(30, 31, 34, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 8px 14px;
+  border-radius: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 32px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.stage-controls-center:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 38px -4px rgba(0, 0, 0, 0.75), 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* Right Flank: Theater Mode & Fullscreen Aligned Together */
+.stage-controls-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  pointer-events: auto;
+  min-width: 110px;
+}
+
+/* Base Stage Button with Discord Floating Hover Physics */
 .stage-btn {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   border: none;
-  background-color: #35373c;
-  color: #fff;
+  background-color: #313338;
+  color: #dbdee1;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  transition: all 0.15s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+              background-color 0.18s ease,
+              box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1),
+              color 0.18s ease,
+              border-color 0.18s ease;
+  position: relative;
+  user-select: none;
+  outline: none;
 }
 
+/* The Core "Look like they hover" Lift & Elevation Physics */
 .stage-btn:hover {
-  background-color: #4e5058;
+  transform: translateY(-4px) scale(1.05);
+  background-color: #3f4147;
+  color: #ffffff;
+  box-shadow: 0 12px 22px -2px rgba(0, 0, 0, 0.65), 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
+.stage-btn:active {
+  transform: translateY(-1px) scale(0.97);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.45);
+}
+
+.stage-btn svg {
+  display: block;
+  pointer-events: none;
+  transition: transform 0.18s ease;
+}
+
+.stage-btn:hover svg {
+  transform: scale(1.05);
+}
+
+/* Disconnect Button (Discord Red Hangup Pill/Circle) */
 .stage-btn.danger {
-  background-color: var(--red);
+  background-color: #da373c;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(218, 55, 60, 0.4);
 }
 
 .stage-btn.danger:hover {
-  background-color: #d83a3e;
+  background-color: #f23f43;
+  color: #ffffff;
+  box-shadow: 0 12px 26px -2px rgba(242, 63, 67, 0.65), 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 
+/* Active Muted / Deafened States */
 .stage-btn.active-muted {
-  background-color: var(--red);
+  background-color: #da373c !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(218, 55, 60, 0.4);
+}
+
+.stage-btn.active-muted:hover {
+  background-color: #f23f43 !important;
+  box-shadow: 0 12px 26px -2px rgba(242, 63, 67, 0.65);
+}
+
+/* Active Camera / Screenshare States */
+.stage-btn.active,
+.stage-btn.active-screen {
+  background-color: #23a55a !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(35, 165, 90, 0.4);
+}
+
+.stage-btn.active:hover,
+.stage-btn.active-screen:hover {
+  background-color: #2ecc71 !important;
+  box-shadow: 0 12px 26px -2px rgba(46, 204, 113, 0.65);
+}
+
+/* Flank Utility Buttons (Invite, Theater Mode, Fullscreen) */
+.stage-btn-utility {
+  width: 44px;
+  height: 44px;
+  background: rgba(30, 31, 34, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #949ba4;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.stage-btn-utility:hover {
+  background-color: rgba(43, 45, 49, 0.98);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 24px -2px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.stage-btn-utility.active {
+  background-color: var(--blurple);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 6px 18px rgba(88, 101, 242, 0.45);
+}
+
+.stage-btn-utility.active:hover {
+  background-color: #4752c4;
+  box-shadow: 0 12px 26px -2px rgba(88, 101, 242, 0.65);
 }
 
 /* 5. Members Sidebar (Right) */
@@ -1599,9 +1735,18 @@ body {
     font-size: 11px;
   }
   .voice-stage-controls {
-    height: 54px;
+    height: 68px;
+    padding: 0 10px 8px 10px;
+  }
+  .stage-controls-left,
+  .stage-controls-right {
+    min-width: auto;
+    gap: 6px;
+  }
+  .stage-controls-center {
     gap: 8px;
-    padding: 0 8px;
+    padding: 5px 8px;
+    border-radius: 32px;
   }
   .stage-btn {
     width: 38px;
@@ -1612,7 +1757,15 @@ body {
     width: 16px;
     height: 16px;
   }
+  .stage-btn-utility {
+    width: 36px;
+    height: 36px;
+  }
+  .voice-grid {
+    padding: 16px 16px 76px 16px;
+  }
   .voice-grid.filmstrip {
+    margin-bottom: 70px;
     height: 76px;
     min-height: 76px;
     max-height: 76px;

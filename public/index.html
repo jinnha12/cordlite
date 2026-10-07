@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="/css/style.css?v=28" />
+  <link rel="stylesheet" href="/css/style.css?v=29" />
 </head>
 <body>
   <!-- Telegram Login Splash Screen -->
@@ -266,27 +266,46 @@
           </div>
 
           <div class="voice-stage-controls">
-            <button class="stage-btn" id="btn-stage-camera" title="Share Video / Camera">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-            </button>
-            <button class="stage-btn" id="btn-stage-screenshare" title="Share Screen">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm9 3h-2v2H9v2h2v2h2v-2h2v-2h-2V9z"/><path d="M13 7l4 4-4 4v-3H9v-2h4V7z"/></svg>
-            </button>
-            <button class="stage-btn" id="btn-stage-theater" title="Toggle Theater Mode (T)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 14H5V6h14v12z"/><path d="M7 8h10v2H7zm0 3h10v2H7z"/></svg>
-            </button>
-            <button class="stage-btn" id="btn-stage-soundboard" title="Soundboard">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/></svg>
-            </button>
-            <button class="stage-btn" id="btn-stage-mute" title="Toggle Mic">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
-            </button>
-            <button class="stage-btn" id="btn-stage-deafen" title="Toggle Deafen">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
-            </button>
-            <button class="stage-btn danger" id="btn-stage-disconnect" title="Disconnect">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C3.28 8.82 7.42 7.15 12 7.15c4.58 0 8.72 1.67 11.71 4.52.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
-            </button>
+            <!-- Left Flank: Invite / Add User -->
+            <div class="stage-controls-left">
+              <button class="stage-btn stage-btn-utility" id="btn-stage-invite" title="Invite Friends / Add User">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Center Floating Dock: Main Stage Controls -->
+            <div class="stage-controls-center">
+              <button class="stage-btn" id="btn-stage-camera" title="Share Video / Camera">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+              </button>
+              <button class="stage-btn" id="btn-stage-screenshare" title="Share Screen">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm9 3h-2v2H9v2h2v2h2v-2h2v-2h-2V9z"/><path d="M13 7l4 4-4 4v-3H9v-2h4V7z"/></svg>
+              </button>
+              <button class="stage-btn" id="btn-stage-soundboard" title="Soundboard">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/></svg>
+              </button>
+              <button class="stage-btn" id="btn-stage-mute" title="Toggle Mic (M)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+              </button>
+              <button class="stage-btn" id="btn-stage-deafen" title="Toggle Deafen (D)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h4v-8H5v-1a7 7 0 0 1 14 0v1h-4v8h4c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+              </button>
+              <button class="stage-btn danger" id="btn-stage-disconnect" title="Disconnect">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.99.99 0 0 1 0-1.41C3.28 8.82 7.42 7.15 12 7.15c4.58 0 8.72 1.67 11.71 4.52.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+              </button>
+            </div>
+
+            <!-- Right Flank: Theater Mode & Fullscreen -->
+            <div class="stage-controls-right">
+              <button class="stage-btn stage-btn-utility" id="btn-stage-theater" title="Toggle Theater Mode (T)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.89-2-2-2zm0 14H5V6h14v12z"/><path d="M7 8h10v2H7zm0 3h10v2H7z"/></svg>
+              </button>
+              <button class="stage-btn stage-btn-utility" id="btn-stage-fullscreen" title="Toggle Fullscreen (F)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+              </button>
+            </div>
           </div>
         </section>
       </div>
@@ -743,9 +762,9 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/icons.js?v=28"></script>
-  <script src="/js/audio-manager.js?v=28"></script>
-  <script src="/js/webrtc-voice.js?v=28"></script>
-  <script src="/js/app.js?v=28"></script>
+  <script src="/js/icons.js?v=29"></script>
+  <script src="/js/audio-manager.js?v=29"></script>
+  <script src="/js/webrtc-voice.js?v=29"></script>
+  <script src="/js/app.js?v=29"></script>
 </body>
 </html>

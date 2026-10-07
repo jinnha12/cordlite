@@ -151,12 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const voiceStage = document.getElementById('voice-stage');
   const stageStreamFocus = document.getElementById('stage-stream-focus');
   const voiceGrid = document.getElementById('voice-grid');
+  const btnStageInvite = document.getElementById('btn-stage-invite');
   const btnStageMute = document.getElementById('btn-stage-mute');
   const btnStageDeafen = document.getElementById('btn-stage-deafen');
   const btnStageDisconnect = document.getElementById('btn-stage-disconnect');
   const btnStageCamera = document.getElementById('btn-stage-camera');
   const btnStageScreenshare = document.getElementById('btn-stage-screenshare');
   const btnStageTheater = document.getElementById('btn-stage-theater');
+  const btnStageFullscreen = document.getElementById('btn-stage-fullscreen');
   const btnStageSoundboard = document.getElementById('btn-stage-soundboard');
 
   const membersSidebar = document.getElementById('members-sidebar');
@@ -2010,11 +2012,35 @@ document.addEventListener('DOMContentLoaded', () => {
     renderVoiceStage();
   };
 
+  if (btnStageInvite) {
+    btnStageInvite.onclick = () => {
+      if (btnInvite) btnInvite.click();
+    };
+  }
+
   if (btnStageTheater) {
     btnStageTheater.onclick = () => {
       toggleTheaterMode();
     };
   }
+
+  if (btnStageFullscreen) {
+    btnStageFullscreen.onclick = () => {
+      const streamContainer = document.getElementById('stream-focus-container');
+      toggleStreamFullscreen(streamContainer || voiceStage);
+    };
+  }
+
+  const updateStageFullscreenIcons = () => {
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (btnStageFullscreen) {
+      btnStageFullscreen.classList.toggle('active', isFs);
+      btnStageFullscreen.innerHTML = isFs ? window.ICONS.fullscreenExit : window.ICONS.fullscreen;
+      btnStageFullscreen.title = isFs ? 'Exit Fullscreen (F)' : 'Toggle Fullscreen (F)';
+    }
+  };
+  document.addEventListener('fullscreenchange', updateStageFullscreenIcons);
+  document.addEventListener('webkitfullscreenchange', updateStageFullscreenIcons);
 
   // Feature 4: Soundboard Modal & Buttons
   btnStageSoundboard.onclick = () => {
@@ -2059,10 +2085,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (e.key === 'f' || e.key === 'F') {
         const streamContainer = document.getElementById('stream-focus-container');
-        if (streamContainer) {
-          toggleStreamFullscreen(streamContainer);
-          return;
-        }
+        toggleStreamFullscreen(streamContainer || voiceStage);
+        return;
       }
       if (e.key === 'c' || e.key === 'C') {
         const btnStreamChat = document.getElementById('btn-stream-chat-toggle');
