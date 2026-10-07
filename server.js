@@ -67,6 +67,8 @@ const defaultState = {
       id: 'friends-hangout',
       name: 'Friends Hangout',
       icon: 'FH',
+      isPublic: true,
+      members: [],
       created: Date.now(),
       channels: [
         { id: 'c-general', name: 'general', type: 'text' },
@@ -164,6 +166,41 @@ if (db.users) {
   }
 }
 
+// Auto-heal / migration for servers: private invite-only rules
+if (db.servers) {
+  let needsServerSave = false;
+  for (const srv of Object.values(db.servers)) {
+    if (!srv) continue;
+    if (srv.id === 'friends-hangout') {
+      if (srv.isPublic !== true) {
+        srv.isPublic = true;
+        needsServerSave = true;
+      }
+      if (!Array.isArray(srv.members)) {
+        srv.members = [];
+        needsServerSave = true;
+      }
+    } else {
+      if (srv.isPublic !== false) {
+        srv.isPublic = false;
+        needsServerSave = true;
+      }
+      if (!Array.isArray(srv.members)) {
+        srv.members = srv.ownerId ? [srv.ownerId] : [];
+        needsServerSave = true;
+      } else if (srv.ownerId && !srv.members.includes(srv.ownerId)) {
+        srv.members.push(srv.ownerId);
+        needsServerSave = true;
+      }
+    }
+  }
+  if (needsServerSave) {
+    try {
+      fs.writeFileSync(STORE_PATH, JSON.stringify(db, null, 2));
+    } catch (e) {}
+  }
+}
+
 // Auto-heal any server icons that were incorrectly defaulted to 'C'
 if (db.servers) {
   let needsSave = false;
@@ -183,6 +220,20 @@ if (db.servers) {
       console.error('Error auto-saving store.json:', e);
     }
   }
+}
+
+function isUserAuthorizedForServer(userId, server) {
+  if (!server) return false;
+  if (server.id === 'friends-hangout' || server.isPublic === true) return true;
+  if (!userId) return false;
+  if (server.ownerId && server.ownerId === userId) return true;
+  if (Array.isArray(server.members) && server.members.includes(userId)) return true;
+  return false;
+}
+
+function getServersForUser(userId) {
+  if (!db.servers) return [];
+  return Object.values(db.servers).filter(srv => isUserAuthorizedForServer(userId, srv));
 }
 
 function saveStore() {
@@ -326,13 +377,46 @@ io.on('connection', (socket) => {
 
   // Register user profile
   socket.on('user:register', (userData) => {
-    const targetServerId = userData.serverId || 'friends-hangout';
+    let targetServerId = userData.serverId || 'friends-hangout';
     const isTg = !!userData.isTelegramVerified;
     const tgPhone = userData.telegramPhone || null;
     const dbUser = (db.users && db.users[userData.userId]) || null;
+    const effectiveUserId = userData.userId || socket.id;
+
+    // Check if user is joining via invite link or authorized for server
+    let requestedServer = db.servers[targetServerId];
+    if (requestedServer) {
+      if (targetServerId !== 'friends-hangout') {
+        if (!isUserAuthorizedForServer(effectiveUserId, requestedServer)) {
+          if (userData.isInviteJoin) {
+            // Authorized via invite link! Add to members
+            if (!Array.isArray(requestedServer.members)) requestedServer.members = [];
+            if (!requestedServer.members.includes(effectiveUserId)) {
+              requestedServer.members.push(effectiveUserId);
+              if (!db.roles) db.roles = {};
+              if (!db.roles[targetServerId]) db.roles[targetServerId] = {};
+              if (!db.roles[targetServerId][effectiveUserId]) {
+                db.roles[targetServerId][effectiveUserId] = 'member';
+              }
+              saveStore();
+            }
+          } else {
+            // Unauthorized and not an invite join -> fallback to friends-hangout
+            targetServerId = 'friends-hangout';
+            socket.emit('server:access_denied', {
+              serverId: userData.serverId,
+              message: 'This server is private and invite-only. You must be invited to join.'
+            });
+          }
+        }
+      }
+    } else {
+      targetServerId = 'friends-hangout';
+    }
+
     const userObj = {
       socketId: socket.id,
-      userId: userData.userId || socket.id,
+      userId: effectiveUserId,
       name: userData.name || (dbUser && dbUser.name) || 'Anonymous',
       username: userData.username || (dbUser && dbUser.username) || null,
       avatarColor: userData.avatarColor || (dbUser && dbUser.avatarColor) || '#5865F2',
@@ -373,11 +457,11 @@ io.on('connection', (socket) => {
     // Make socket immediately join target server room!
     socket.join(`server:${targetServerId}`);
 
-    // Send available servers list
-    socket.emit('server:list', Object.values(db.servers));
+    // Send available servers list (ONLY authorized servers for this user!)
+    socket.emit('server:list', getServersForUser(userObj.userId));
     
     // Send details of initial server
-    const serverData = db.servers[targetServerId] || Object.values(db.servers)[0];
+    const serverData = db.servers[targetServerId] || db.servers['friends-hangout'] || Object.values(db.servers)[0];
     if (serverData) {
       socket.emit('server:details', serverData);
     }
@@ -385,7 +469,7 @@ io.on('connection', (socket) => {
     broadcastServerPresence();
   });
 
-  // Server creation
+  // Server creation (Private & Invite-only: owner is creator)
   socket.on('server:create', ({ name, icon }) => {
     const user = activeUsers.get(socket.id);
     const serverId = 'srv-' + Math.random().toString(36).substring(2, 9);
@@ -401,11 +485,14 @@ io.on('connection', (socket) => {
       }
     }
 
+    const ownerId = user ? user.userId : null;
     const newServer = {
       id: serverId,
       name: cleanName,
       icon: finalIcon || 'NH',
-      ownerId: user ? user.userId : null,
+      ownerId: ownerId,
+      isPublic: false,
+      members: ownerId ? [ownerId] : [],
       created: Date.now(),
       channels: [
         { id: `c-${serverId}-gen`, name: 'general', type: 'text' },
@@ -414,12 +501,227 @@ io.on('connection', (socket) => {
     };
     if (!db.roles) db.roles = {};
     if (!db.roles[serverId]) db.roles[serverId] = {};
-    if (user) db.roles[serverId][user.userId] = 'owner';
+    if (ownerId) db.roles[serverId][ownerId] = 'owner';
     db.servers[serverId] = newServer;
     saveStore();
 
-    io.emit('server:list', Object.values(db.servers));
+    // Send updated server list ONLY to the owner! Other users CANNOT see this private server!
+    if (ownerId) {
+      socket.emit('server:list', getServersForUser(ownerId));
+    }
     socket.emit('server:created', newServer);
+  });
+
+  // Join server via invite link or code
+  socket.on('server:join_invite', ({ inviteCode }, callback) => {
+    if (typeof callback !== 'function') callback = () => {};
+    const user = activeUsers.get(socket.id);
+    if (!user) return callback({ success: false, message: 'You must be connected to join a server.' });
+
+    if (!inviteCode || typeof inviteCode !== 'string') {
+      return callback({ success: false, message: 'Please enter a valid invite link or code.' });
+    }
+
+    // Extract serverId from raw code or URL
+    let targetId = inviteCode.trim();
+    if (targetId.includes('invite=')) {
+      const match = targetId.match(/invite=([a-zA-Z0-9_-]+)/);
+      if (match) targetId = match[1];
+    } else if (targetId.includes('server=')) {
+      const match = targetId.match(/server=([a-zA-Z0-9_-]+)/);
+      if (match) targetId = match[1];
+    } else if (targetId.includes('/')) {
+      const parts = targetId.split('/');
+      targetId = parts[parts.length - 1].replace(/[^a-zA-Z0-9_-]/g, '');
+    }
+
+    const targetServer = db.servers[targetId];
+    if (!targetServer) {
+      return callback({ success: false, message: 'Invalid or expired invite link. Server not found.' });
+    }
+
+    if (!Array.isArray(targetServer.members)) targetServer.members = [];
+    if (!targetServer.members.includes(user.userId)) {
+      targetServer.members.push(user.userId);
+      if (!db.roles) db.roles = {};
+      if (!db.roles[targetId]) db.roles[targetId] = {};
+      if (!db.roles[targetId][user.userId]) {
+        db.roles[targetId][user.userId] = 'member';
+      }
+      saveStore();
+    }
+
+    // Send updated server list to user
+    socket.emit('server:list', getServersForUser(user.userId));
+    return callback({ success: true, server: targetServer });
+  });
+
+  // Leave a server (members only, not owner)
+  socket.on('server:leave', ({ serverId }, callback) => {
+    if (typeof callback !== 'function') callback = () => {};
+    const user = activeUsers.get(socket.id);
+    if (!user || !serverId) return callback({ success: false, message: 'Invalid request.' });
+
+    if (serverId === 'friends-hangout') {
+      return callback({ success: false, message: 'Cannot leave the default community lounge.' });
+    }
+
+    const targetServer = db.servers[serverId];
+    if (!targetServer) return callback({ success: false, message: 'Server not found.' });
+
+    if (targetServer.ownerId === user.userId) {
+      return callback({ success: false, message: 'Server owners cannot leave. You can delete the server or transfer ownership.' });
+    }
+
+    if (Array.isArray(targetServer.members)) {
+      targetServer.members = targetServer.members.filter(id => id !== user.userId);
+    }
+    if (db.roles && db.roles[serverId]) {
+      delete db.roles[serverId][user.userId];
+    }
+    if (db.nicknames && db.nicknames[serverId]) {
+      delete db.nicknames[serverId][user.userId];
+    }
+    saveStore();
+
+    if (user.serverId === serverId) {
+      if (user.voiceChannelId) {
+        leaveVoiceChannel(socket, user);
+      }
+      socket.leave(`server:${serverId}`);
+      user.serverId = 'friends-hangout';
+      socket.join('server:friends-hangout');
+      const defaultServer = db.servers['friends-hangout'];
+      if (defaultServer) {
+        socket.emit('server:details', defaultServer);
+      }
+    }
+
+    socket.emit('server:list', getServersForUser(user.userId));
+    broadcastServerPresence();
+    return callback({ success: true });
+  });
+
+  // Delete a server (owner only)
+  socket.on('server:delete', ({ serverId }, callback) => {
+    if (typeof callback !== 'function') callback = () => {};
+    const user = activeUsers.get(socket.id);
+    if (!user || !serverId) return callback({ success: false, message: 'Invalid request.' });
+
+    if (serverId === 'friends-hangout') {
+      return callback({ success: false, message: 'Cannot delete the default community lounge.' });
+    }
+
+    const targetServer = db.servers[serverId];
+    if (!targetServer) return callback({ success: false, message: 'Server not found.' });
+
+    if (targetServer.ownerId !== user.userId) {
+      return callback({ success: false, message: 'Only the server owner can delete this server.' });
+    }
+
+    const serverName = targetServer.name;
+
+    // Evict all active sockets in this server room
+    for (const [sId, activeUser] of activeUsers.entries()) {
+      if (activeUser.serverId === serverId) {
+        const targetSocket = io.sockets.sockets.get(sId);
+        if (targetSocket) {
+          if (activeUser.voiceChannelId) {
+            leaveVoiceChannel(targetSocket, activeUser);
+          }
+          targetSocket.leave(`server:${serverId}`);
+          activeUser.serverId = 'friends-hangout';
+          targetSocket.join('server:friends-hangout');
+          targetSocket.emit('server:deleted', { serverId, serverName });
+          const defaultServer = db.servers['friends-hangout'];
+          if (defaultServer) {
+            targetSocket.emit('server:details', defaultServer);
+          }
+          targetSocket.emit('server:list', getServersForUser(activeUser.userId));
+        }
+      }
+    }
+
+    // Clean up server channels messages
+    if (targetServer.channels) {
+      targetServer.channels.forEach(ch => {
+        if (db.messages && db.messages[ch.id]) {
+          delete db.messages[ch.id];
+        }
+      });
+    }
+
+    delete db.servers[serverId];
+    if (db.roles) delete db.roles[serverId];
+    if (db.nicknames) delete db.nicknames[serverId];
+    saveStore();
+
+    broadcastServerPresence();
+    broadcastVoiceStatus();
+    return callback({ success: true, serverName });
+  });
+
+  // Kick a member from a private server (owner or admin only)
+  socket.on('server:kick_member', ({ serverId, targetUserId }, callback) => {
+    if (typeof callback !== 'function') callback = () => {};
+    const user = activeUsers.get(socket.id);
+    if (!user || !serverId || !targetUserId) return callback({ success: false, message: 'Invalid request.' });
+
+    if (serverId === 'friends-hangout') {
+      return callback({ success: false, message: 'Cannot kick users from the default public lounge.' });
+    }
+
+    const targetServer = db.servers[serverId];
+    if (!targetServer) return callback({ success: false, message: 'Server not found.' });
+
+    const isOwner = targetServer.ownerId === user.userId;
+    const isAdmin = db.roles && db.roles[serverId] && db.roles[serverId][user.userId] === 'admin';
+    if (!isOwner && !isAdmin) {
+      return callback({ success: false, message: 'You do not have permission to kick members from this server.' });
+    }
+
+    if (targetServer.ownerId === targetUserId) {
+      return callback({ success: false, message: 'Cannot kick the server owner.' });
+    }
+
+    // Remove from members
+    if (Array.isArray(targetServer.members)) {
+      targetServer.members = targetServer.members.filter(id => id !== targetUserId);
+    }
+    if (db.roles && db.roles[serverId]) {
+      delete db.roles[serverId][targetUserId];
+    }
+    if (db.nicknames && db.nicknames[serverId]) {
+      delete db.nicknames[serverId][targetUserId];
+    }
+    saveStore();
+
+    // Evict any active socket for target user
+    for (const [sId, activeUser] of activeUsers.entries()) {
+      if (activeUser.userId === targetUserId) {
+        const targetSocket = io.sockets.sockets.get(sId);
+        if (targetSocket) {
+          targetSocket.emit('server:kicked', { serverId, serverName: targetServer.name });
+          if (activeUser.serverId === serverId) {
+            if (activeUser.voiceChannelId) {
+              leaveVoiceChannel(targetSocket, activeUser);
+            }
+            targetSocket.leave(`server:${serverId}`);
+            activeUser.serverId = 'friends-hangout';
+            targetSocket.join('server:friends-hangout');
+            const defaultServer = db.servers['friends-hangout'];
+            if (defaultServer) {
+              targetSocket.emit('server:details', defaultServer);
+            }
+          }
+          targetSocket.emit('server:list', getServersForUser(targetUserId));
+        }
+      }
+    }
+
+    broadcastServerPresence();
+    broadcastVoiceStatus();
+    return callback({ success: true });
   });
 
   // Feature 5: Server Nicknames & Roles
@@ -478,6 +780,18 @@ io.on('connection', (socket) => {
     const user = activeUsers.get(socket.id);
     if (!user) return;
     
+    const targetServer = db.servers[serverId];
+    if (!targetServer) {
+      return socket.emit('server:not_found', { serverId });
+    }
+
+    if (!isUserAuthorizedForServer(user.userId, targetServer)) {
+      return socket.emit('server:access_denied', {
+        serverId,
+        message: 'This server is private and invite-only. You must be invited to join.'
+      });
+    }
+
     // Leave previous server room
     if (user.serverId) {
       socket.leave(`server:${user.serverId}`);
@@ -485,10 +799,7 @@ io.on('connection', (socket) => {
     user.serverId = serverId;
     socket.join(`server:${serverId}`);
     
-    const serverData = db.servers[serverId];
-    if (serverData) {
-      socket.emit('server:details', serverData);
-    }
+    socket.emit('server:details', targetServer);
     broadcastServerPresence();
   });
 
@@ -1231,11 +1542,25 @@ function broadcastServerPresence() {
     serverUsersMap[user.serverId].push(memberObj);
   }
 
+  // 1. Emit server members strictly to each server room
   for (const [serverId, members] of Object.entries(serverUsersMap)) {
     io.to(`server:${serverId}`).emit('server:members', { serverId, members });
   }
-  // Global sync event with all active users
-  io.emit('server:members_all', { serverUsersMap, allUsersList });
+
+  // 2. For each individual socket, send authorized serverUsersMap so private servers never leak to non-members
+  for (const [socketId, activeUser] of activeUsers.entries()) {
+    const targetSocket = io.sockets.sockets.get(socketId);
+    if (!targetSocket) continue;
+
+    const authorizedMap = {};
+    for (const [sId, members] of Object.entries(serverUsersMap)) {
+      const sObj = db.servers[sId];
+      if (sObj && isUserAuthorizedForServer(activeUser.userId, sObj)) {
+        authorizedMap[sId] = members;
+      }
+    }
+    targetSocket.emit('server:members_all', { serverUsersMap: authorizedMap, allUsersList });
+  }
 }
 
 function broadcastVoiceStatus() {

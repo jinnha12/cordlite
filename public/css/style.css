@@ -340,6 +340,188 @@ body {
   background-color: rgba(255,255,255,0.04);
 }
 
+.server-header.open #server-header-chevron {
+  transform: rotate(180deg);
+}
+
+#server-header-chevron {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* Discord-spec Server Header Dropdown Menu */
+.server-dropdown-menu {
+  position: absolute;
+  top: 54px;
+  left: 8px;
+  width: 224px;
+  background-color: #111214;
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdownPop 0.15s ease-out;
+}
+
+@keyframes dropdownPop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.server-dropdown-header {
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dropdown-server-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f2f3f5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.dropdown-server-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(240, 178, 50, 0.2);
+  color: #f0b232;
+  border: 1px solid rgba(240, 178, 50, 0.3);
+}
+
+.dropdown-server-badge.member {
+  background-color: rgba(148, 155, 164, 0.15);
+  color: #949ba4;
+  border-color: rgba(148, 155, 164, 0.25);
+}
+
+.dropdown-server-badge.public {
+  background-color: rgba(35, 165, 90, 0.15);
+  color: #23a55a;
+  border-color: rgba(35, 165, 90, 0.25);
+}
+
+.server-dropdown-divider {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+.server-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #dbdee1;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.server-dropdown-item svg {
+  color: #949ba4;
+  transition: color 0.12s;
+}
+
+.server-dropdown-item:hover {
+  background-color: var(--blurple);
+  color: #ffffff;
+}
+
+.server-dropdown-item:hover svg {
+  color: #ffffff;
+}
+
+.server-dropdown-item.highlight {
+  color: #5865f2;
+}
+
+.server-dropdown-item.highlight svg {
+  color: #5865f2;
+}
+
+.server-dropdown-item.highlight:hover {
+  background-color: var(--blurple);
+  color: #ffffff;
+}
+
+.server-dropdown-item.highlight:hover svg {
+  color: #ffffff;
+}
+
+.server-dropdown-item.danger {
+  color: #f23f43;
+}
+
+.server-dropdown-item.danger svg {
+  color: #f23f43;
+}
+
+.server-dropdown-item.danger:hover {
+  background-color: #f23f43;
+  color: #ffffff;
+}
+
+.server-dropdown-item.danger:hover svg {
+  color: #ffffff;
+}
+
+/* Modal Tabs (Create / Join Server) */
+.server-modal-tabs {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 3px;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.server-tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #949ba4;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.server-tab-btn:hover {
+  color: #dbdee1;
+}
+
+.server-tab-btn.active {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
 .channels-container {
   flex: 1;
   overflow-y: auto;

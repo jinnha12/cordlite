@@ -76,7 +76,8 @@ document.addEventListener('DOMContentLoaded', () => {
       telegramPhone: user.telegramPhone || null,
       telegramUsername: user.telegramUsername || null,
       hasCompletedOnboarding: user.hasCompletedOnboarding !== undefined ? user.hasCompletedOnboarding : true,
-      serverId: inviteServerId || 'friends-hangout'
+      serverId: inviteServerId || 'friends-hangout',
+      isInviteJoin: !!inviteServerId
     });
   }
 
@@ -300,6 +301,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMe = targetUser.userId === user.userId;
     const isLocallyMuted = !isMe && voiceManager.isPeerLocallyMuted(targetUser.socketId, targetUser.userId);
     const peerVol = !isMe ? Math.round(voiceManager.getPeerVolume(targetUser.socketId, targetUser.userId) * 100) : 100;
+    const isOwner = currentServer && currentServer.ownerId === user.userId;
+    const myMemberObj = serverMembers.find(m => m.userId === user.userId);
+    const myRole = (myMemberObj && myMemberObj.role) || (isOwner ? 'owner' : 'member');
+    const canKick = (isOwner || myRole === 'admin') && currentServer && currentServer.id !== 'friends-hangout' && targetUser.userId !== currentServer.ownerId;
 
     let itemsHtml = '';
 
@@ -372,6 +377,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="ctx-item" id="ctx-role-member">
           <div class="ctx-item-left"><span style="color: #949ba4;">${window.ICONS.users}</span><span>Set as Member</span></div>
         </div>
+
+        ${canKick ? `
+          <div class="ctx-divider"></div>
+          <div class="ctx-item danger" id="ctx-action-kick-member" style="color: var(--red);">
+            <div class="ctx-item-left"><span style="color: var(--red);">${window.ICONS.userX}</span><span>Kick from Server</span></div>
+          </div>
+        ` : ''}
 
         <div class="ctx-divider"></div>
         <div class="ctx-item" id="ctx-action-copy-id">
@@ -545,6 +557,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentServer) {
           socket.emit('server:update_role', { serverId: currentServer.id, targetUserId: targetUser.userId, role: 'member' });
           showToast(`Set ${targetUser.name} as Member`);
+        }
+      };
+    }
+
+    const kickMemberBtn = document.getElementById('ctx-action-kick-member');
+    if (kickMemberBtn) {
+      kickMemberBtn.onclick = () => {
+        closeContextMenu();
+        if (!currentServer) return;
+        if (confirm(`Kick ${targetUser.name} from "${currentServer.name}"?`)) {
+          socket.emit('server:kick_member', {
+            serverId: currentServer.id,
+            targetUserId: targetUser.userId
+          }, (res) => {
+            if (res && res.success) {
+              showToast(`${targetUser.name} was kicked from the server.`);
+            } else {
+              showToast((res && res.message) || 'Failed to kick member.');
+            }
+          });
         }
       };
     }
@@ -743,6 +775,10 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('server:details', (serverData) => {
     currentServer = serverData;
     serverHeaderTitle.textContent = serverData.name;
+    const serverLockEl = document.getElementById('server-header-lock');
+    if (serverLockEl) {
+      serverLockEl.style.display = (serverData.id !== 'friends-hangout' && !serverData.isPublic) ? 'inline-flex' : 'none';
+    }
     renderChannels();
     
     // Select first text channel if none selected
@@ -752,6 +788,21 @@ document.addEventListener('DOMContentLoaded', () => {
         selectChannel(firstText.id);
       }
     }
+  });
+
+  socket.on('server:access_denied', (data) => {
+    showToast(data.message || 'This server is private and invite-only. You must be invited to join.');
+    selectServer('friends-hangout');
+  });
+
+  socket.on('server:kicked', (data) => {
+    showToast(`You were kicked from "${data.serverName || 'the server'}".`);
+    selectServer('friends-hangout');
+  });
+
+  socket.on('server:deleted', (data) => {
+    showToast(`Server "${data.serverName || 'Server'}" was deleted by its owner.`);
+    selectServer('friends-hangout');
   });
 
   socket.on('server:created', (newServer) => {
@@ -2207,6 +2258,191 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.key === 'Enter') {
         e.preventDefault();
         handleCreateServerSubmit();
+      }
+    });
+  }
+
+  // Server Modal Tabs & Join with Invite
+  const tabBtnCreate = document.getElementById('tab-btn-create-server');
+  const tabBtnJoin = document.getElementById('tab-btn-join-server');
+  const paneCreate = document.getElementById('server-pane-create');
+  const paneJoin = document.getElementById('server-pane-join');
+  const btnSubmitCreate = document.getElementById('btn-submit-create-server');
+  const btnSubmitJoin = document.getElementById('btn-submit-join-server');
+  const inputJoinCode = document.getElementById('input-join-invite-code');
+
+  if (tabBtnCreate && tabBtnJoin && paneCreate && paneJoin && btnSubmitCreate && btnSubmitJoin) {
+    tabBtnCreate.onclick = () => {
+      tabBtnCreate.classList.add('active');
+      tabBtnJoin.classList.remove('active');
+      paneCreate.style.display = 'block';
+      paneJoin.style.display = 'none';
+      btnSubmitCreate.style.display = 'inline-block';
+      btnSubmitJoin.style.display = 'none';
+    };
+
+    tabBtnJoin.onclick = () => {
+      tabBtnJoin.classList.add('active');
+      tabBtnCreate.classList.remove('active');
+      paneJoin.style.display = 'block';
+      paneCreate.style.display = 'none';
+      btnSubmitJoin.style.display = 'inline-block';
+      btnSubmitCreate.style.display = 'none';
+      if (inputJoinCode) inputJoinCode.focus();
+    };
+
+    const handleJoinInviteSubmit = () => {
+      const code = inputJoinCode ? inputJoinCode.value.trim() : '';
+      if (!code) {
+        showToast('Please enter an invite link or server code');
+        return;
+      }
+      socket.emit('server:join_invite', { inviteCode: code }, (res) => {
+        if (res && res.success) {
+          if (inputJoinCode) inputJoinCode.value = '';
+          closeModal(modalCreateServer);
+          selectServer(res.server.id);
+          showToast(`Joined "${res.server.name}"!`);
+        } else {
+          showToast((res && res.message) || 'Failed to join server. Check the invite link.');
+        }
+      });
+    };
+
+    btnSubmitJoin.onclick = handleJoinInviteSubmit;
+    if (inputJoinCode) {
+      inputJoinCode.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleJoinInviteSubmit();
+        }
+      });
+    }
+  }
+
+  // Server Header Dropdown Menu (Discord-style)
+  const serverHeaderEl = document.getElementById('server-header');
+  const serverDropdownMenu = document.getElementById('server-dropdown-menu');
+  const dropdownServerName = document.getElementById('dropdown-server-name');
+  const dropdownServerBadge = document.getElementById('dropdown-server-badge');
+  const dropdownInviteBtn = document.getElementById('dropdown-action-invite');
+  const dropdownCreateChanBtn = document.getElementById('dropdown-action-create-channel');
+  const dropdownNicknameBtn = document.getElementById('dropdown-action-nickname');
+  const dropdownLeaveBtn = document.getElementById('dropdown-action-leave');
+  const dropdownDeleteBtn = document.getElementById('dropdown-action-delete');
+
+  function closeServerDropdown() {
+    if (serverDropdownMenu) serverDropdownMenu.style.display = 'none';
+    if (serverHeaderEl) serverHeaderEl.classList.remove('open');
+  }
+
+  if (serverHeaderEl && serverDropdownMenu) {
+    serverHeaderEl.onclick = (e) => {
+      e.stopPropagation();
+      if (!currentServer) return;
+      const isOpen = serverDropdownMenu.style.display === 'flex';
+      if (isOpen) {
+        closeServerDropdown();
+        return;
+      }
+
+      if (dropdownServerName) dropdownServerName.textContent = currentServer.name;
+      const isOwner = currentServer.ownerId === user.userId;
+      const isPublic = currentServer.id === 'friends-hangout' || currentServer.isPublic;
+
+      if (dropdownServerBadge) {
+        if (isPublic) {
+          dropdownServerBadge.textContent = 'Public Lounge';
+          dropdownServerBadge.className = 'dropdown-server-badge public';
+        } else if (isOwner) {
+          dropdownServerBadge.textContent = 'Owner';
+          dropdownServerBadge.className = 'dropdown-server-badge';
+        } else {
+          dropdownServerBadge.textContent = 'Member';
+          dropdownServerBadge.className = 'dropdown-server-badge member';
+        }
+      }
+
+      if (dropdownLeaveBtn) {
+        dropdownLeaveBtn.style.display = (!isPublic && !isOwner) ? 'flex' : 'none';
+      }
+      if (dropdownDeleteBtn) {
+        dropdownDeleteBtn.style.display = (!isPublic && isOwner) ? 'flex' : 'none';
+      }
+
+      serverDropdownMenu.style.display = 'flex';
+      serverHeaderEl.classList.add('open');
+    };
+
+    if (dropdownInviteBtn) {
+      dropdownInviteBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeServerDropdown();
+        if (btnInvite) btnInvite.click();
+      };
+    }
+
+    if (dropdownCreateChanBtn) {
+      dropdownCreateChanBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeServerDropdown();
+        const createTextBtn = document.getElementById('btn-open-create-text');
+        if (createTextBtn) createTextBtn.click();
+      };
+    }
+
+    if (dropdownNicknameBtn) {
+      dropdownNicknameBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeServerDropdown();
+        if (!currentServer) return;
+        const myMember = serverMembers.find(m => m.userId === user.userId);
+        const curNick = (myMember && myMember.nickname) || '';
+        const newNick = window.prompt(`Set nickname for this server (leave blank to reset):`, curNick);
+        if (newNick !== null) {
+          socket.emit('server:update_nickname', { serverId: currentServer.id, nickname: newNick.trim() });
+          showToast('Server nickname updated!');
+        }
+      };
+    }
+
+    if (dropdownLeaveBtn) {
+      dropdownLeaveBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeServerDropdown();
+        if (!currentServer) return;
+        if (confirm(`Are you sure you want to leave "${currentServer.name}"? You will need an invite link to rejoin.`)) {
+          socket.emit('server:leave', { serverId: currentServer.id }, (res) => {
+            if (res && res.success) {
+              showToast(`You left "${currentServer.name}".`);
+            } else {
+              showToast((res && res.message) || 'Failed to leave server.');
+            }
+          });
+        }
+      };
+    }
+
+    if (dropdownDeleteBtn) {
+      dropdownDeleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeServerDropdown();
+        if (!currentServer) return;
+        if (confirm(`Permanently delete "${currentServer.name}"? All channels and messages will be deleted. This cannot be undone.`)) {
+          socket.emit('server:delete', { serverId: currentServer.id }, (res) => {
+            if (res && res.success) {
+              showToast(`Server "${res.serverName || 'Server'}" was deleted.`);
+            } else {
+              showToast((res && res.message) || 'Failed to delete server.');
+            }
+          });
+        }
+      };
+    }
+
+    window.addEventListener('click', (e) => {
+      if (!serverDropdownMenu.contains(e.target) && e.target !== serverHeaderEl && !serverHeaderEl.contains(e.target)) {
+        closeServerDropdown();
       }
     });
   }
