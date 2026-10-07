@@ -14,7 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.userId && parsed.isTelegramVerified) {
+        // Permanent Telegram-verified users bypass the splash on reload.
+        // Demo guest sessions do not auto-trap the user on reload so you can always use demo again!
+        if (parsed && parsed.userId && parsed.isTelegramVerified && !parsed.isDemoUser) {
           return parsed;
         }
       } catch (e) {}
@@ -40,6 +42,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (splash) splash.style.display = 'none';
     if (appContainer) appContainer.style.display = 'flex';
 
+    const topDemoPill = document.getElementById('btn-top-switch-account');
+    if (topDemoPill) {
+      topDemoPill.style.display = user.isDemoUser ? 'inline-flex' : 'none';
+      topDemoPill.onclick = logout;
+    }
+
+    const quickLogoutBtn = document.getElementById('btn-quick-logout');
+    if (quickLogoutBtn) {
+      quickLogoutBtn.onclick = logout;
+    }
+
     renderUserBar();
     syncTelegramAccountSection();
     doRegister();
@@ -64,7 +77,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function logout() {
     localStorage.removeItem('cordlite_user');
-    window.location.reload();
+    sessionStorage.removeItem('cordlite_tg_session_id');
+    user = null;
+    isSplashVisible = true;
+    showLoginSplash();
+    initLoginSplash();
+    showToast('Signed out of CordLite.');
   }
 
   function syncTelegramAccountSection() {
@@ -2885,6 +2903,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const resendCountdown = document.getElementById('tg-resend-countdown');
     const btnChangeUser   = document.getElementById('btn-tg-change-user');
     const btnDemoLogin    = document.getElementById('btn-demo-login');
+    const btnResumeDemo   = document.getElementById('btn-resume-demo');
+    const resumeNameEl    = document.getElementById('tg-resume-name');
 
     let currentTargetUsername = '';
     let resendInterval = null;
@@ -2938,6 +2958,32 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // Check if there is a previous demo user session to resume
+    const saved = localStorage.getItem('cordlite_user');
+    let prevDemo = null;
+    if (saved) {
+      try {
+        const p = JSON.parse(saved);
+        if (p && p.isDemoUser) prevDemo = p;
+      } catch (e) {}
+    }
+
+    if (btnResumeDemo) {
+      if (prevDemo) {
+        if (resumeNameEl) resumeNameEl.textContent = prevDemo.name;
+        btnResumeDemo.style.display = 'block';
+        btnResumeDemo.onclick = () => {
+          if (resendInterval) clearInterval(resendInterval);
+          if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+          try { sessionStorage.removeItem('cordlite_tg_session_id'); } catch (e) {}
+          showMainApp(prevDemo);
+          showToast('👋 Resumed session as ' + prevDemo.name);
+        };
+      } else {
+        btnResumeDemo.style.display = 'none';
+      }
+    }
+
     if (isSplashVisible) {
       requestBotSession();
     }
@@ -2948,9 +2994,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stepCode) stepCode.style.display = 'none';
         if (btnSendCode) { btnSendCode.textContent = 'Send Verification Code'; btnSendCode.disabled = false; }
         if (inputUsername) inputUsername.focus();
+        if (btnResumeDemo && prevDemo) btnResumeDemo.style.display = 'block';
       } else {
         if (stepUsername) stepUsername.style.display = 'none';
         if (stepCode) stepCode.style.display = 'flex';
+        if (btnResumeDemo) btnResumeDemo.style.display = 'none';
         if (btnVerifyCode) { btnVerifyCode.textContent = 'Verify & Sign In'; btnVerifyCode.disabled = false; }
         if (inputCode) { inputCode.value = ''; inputCode.focus(); }
       }
