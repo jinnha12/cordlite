@@ -98,11 +98,13 @@ const defaultState = {
     'usr-jin-admin': {
       userId: 'usr-jin-admin',
       name: 'Jin Ha',
+      username: 'jinnha12',
       avatarColor: '#24A1DE',
       avatarUrl: null,
       telegramId: '1478366521',
       telegramUsername: 'jinnha12',
       isTelegramVerified: true,
+      hasCompletedOnboarding: true,
       createdAt: 1791308379544
     }
   },
@@ -138,6 +140,28 @@ try {
 } catch (e) {
   console.warn('Error reading store.json, using default state:', e);
   db = defaultState;
+}
+
+// Auto-heal / migration for users
+if (db.users) {
+  let needsUserSave = false;
+  for (const u of Object.values(db.users)) {
+    if (!u.username) {
+      if (u.telegramUsername) u.username = u.telegramUsername.toLowerCase().replace(/[^a-z0-9_.]/g, '');
+      else if (u.name) u.username = u.name.toLowerCase().replace(/[^a-z0-9_.]/g, '') || ('user_' + (u.userId || '').slice(-4));
+      else u.username = 'user_' + (u.userId || '').slice(-4);
+      needsUserSave = true;
+    }
+    if (u.hasCompletedOnboarding === undefined) {
+      u.hasCompletedOnboarding = true;
+      needsUserSave = true;
+    }
+  }
+  if (needsUserSave) {
+    try {
+      fs.writeFileSync(STORE_PATH, JSON.stringify(db, null, 2));
+    } catch (e) {}
+  }
 }
 
 // Auto-heal any server icons that were incorrectly defaulted to 'C'
@@ -305,15 +329,17 @@ io.on('connection', (socket) => {
     const targetServerId = userData.serverId || 'friends-hangout';
     const isTg = !!userData.isTelegramVerified;
     const tgPhone = userData.telegramPhone || null;
+    const dbUser = (db.users && db.users[userData.userId]) || null;
     const userObj = {
       socketId: socket.id,
       userId: userData.userId || socket.id,
-      name: userData.name || 'Anonymous',
-      avatarColor: userData.avatarColor || '#5865F2',
-      avatarUrl: userData.avatarUrl || null,
+      name: userData.name || (dbUser && dbUser.name) || 'Anonymous',
+      username: userData.username || (dbUser && dbUser.username) || null,
+      avatarColor: userData.avatarColor || (dbUser && dbUser.avatarColor) || '#5865F2',
+      avatarUrl: userData.avatarUrl || (dbUser && dbUser.avatarUrl) || null,
       isTelegramVerified: isTg,
       telegramPhone: tgPhone,
-      telegramUsername: userData.telegramUsername || null,
+      telegramUsername: userData.telegramUsername || (dbUser && dbUser.telegramUsername) || null,
       serverId: targetServerId,
       channelId: null,
       voiceChannelId: null,
@@ -330,12 +356,17 @@ io.on('connection', (socket) => {
       db.users[userObj.userId] = {
         userId: userObj.userId,
         name: userObj.name,
+        username: userObj.username,
         avatarColor: userObj.avatarColor,
         avatarUrl: userObj.avatarUrl,
         telegramUsername: userObj.telegramUsername,
         isTelegramVerified: isTg,
+        hasCompletedOnboarding: userData.hasCompletedOnboarding !== undefined ? !!userData.hasCompletedOnboarding : true,
         createdAt: Date.now()
       };
+      saveStore();
+    } else if (userObj.username && !db.users[userObj.userId].username) {
+      db.users[userObj.userId].username = userObj.username;
       saveStore();
     }
 
@@ -480,6 +511,7 @@ io.on('connection', (socket) => {
       user: {
         id: user.userId,
         name: user.name,
+        username: user.username || (db.users && db.users[user.userId] && db.users[user.userId].username) || null,
         nickname: (serverId && db.nicknames?.[serverId]?.[user.userId]) || null,
         role: (serverId && db.roles?.[serverId]?.[user.userId]) || (serverId && db.servers[serverId]?.ownerId === user.userId ? 'owner' : 'member'),
         avatarColor: user.avatarColor,
@@ -756,8 +788,125 @@ io.on('connection', (socket) => {
     broadcastVoiceStatus();
   });
 
-  // Update User Profile (Nickname / Avatar Color / Avatar Picture / Telegram)
-  socket.on('user:update', ({ name, avatarColor, avatarUrl, isTelegramVerified, telegramPhone }) => {
+  // Live Check Username Uniqueness
+  socket.on('user:check_username', ({ username, currentUserId }, callback) => {
+    if (typeof callback !== 'function') return;
+    if (!username || typeof username !== 'string') {
+      return callback({ available: false, message: 'Username is required.' });
+    }
+    const clean = username.trim().toLowerCase();
+    if (clean.length < 2) {
+      return callback({ available: false, message: 'Username must be at least 2 characters.' });
+    }
+    if (clean.length > 32) {
+      return callback({ available: false, message: 'Username cannot exceed 32 characters.' });
+    }
+    if (!/^[a-z0-9_.]+$/.test(clean)) {
+      return callback({
+        available: false,
+        message: 'Username can only contain lowercase letters, numbers, periods, and underscores.'
+      });
+    }
+    if (clean.startsWith('.') || clean.endsWith('.') || clean.includes('..')) {
+      return callback({
+        available: false,
+        message: 'Username cannot start/end with a period or contain consecutive periods.'
+      });
+    }
+
+    const reserved = ['cordlite', 'admin', 'system', 'bot', 'everyone', 'here', 'mod', 'moderator'];
+    if (reserved.includes(clean)) {
+      return callback({
+        available: false,
+        message: 'That username is reserved.'
+      });
+    }
+
+    if (!db.users) db.users = {};
+    const conflict = Object.values(db.users).find(u =>
+      u.userId !== currentUserId &&
+      u.username &&
+      u.username.toLowerCase() === clean
+    );
+
+    if (conflict) {
+      return callback({
+        available: false,
+        message: 'Username is already taken. Please try another.'
+      });
+    }
+
+    return callback({
+      available: true,
+      username: clean
+    });
+  });
+
+  // Complete Onboarding for First-Time Registration
+  socket.on('user:complete_onboarding', ({ userId, displayName, username }, callback) => {
+    if (typeof callback !== 'function') callback = () => {};
+    if (!userId) return callback({ success: false, message: 'User ID is required.' });
+
+    if (!db.users) db.users = {};
+    let userRecord = db.users[userId];
+    if (!userRecord) {
+      userRecord = Object.values(db.users).find(u => u.userId === userId);
+    }
+
+    if (!userRecord) {
+      return callback({ success: false, message: 'User record not found.' });
+    }
+
+    const cleanName = (displayName && typeof displayName === 'string' && displayName.trim())
+      ? displayName.trim().substring(0, 32)
+      : (userRecord.name || 'User');
+
+    if (!username || typeof username !== 'string') {
+      return callback({ success: false, message: 'Username is required.' });
+    }
+
+    const cleanUser = username.trim().toLowerCase();
+    if (!/^[a-z0-9_.]{2,32}$/.test(cleanUser) || cleanUser.startsWith('.') || cleanUser.endsWith('.') || cleanUser.includes('..')) {
+      return callback({ success: false, message: 'Username can only contain 2-32 lowercase letters, numbers, periods, and underscores.' });
+    }
+
+    const reserved = ['cordlite', 'admin', 'system', 'bot', 'everyone', 'here', 'mod', 'moderator'];
+    if (reserved.includes(cleanUser)) {
+      return callback({ success: false, message: 'That username is reserved.' });
+    }
+
+    // Atomic uniqueness check
+    const conflict = Object.values(db.users).find(u =>
+      u.userId !== userId &&
+      u.username &&
+      u.username.toLowerCase() === cleanUser
+    );
+
+    if (conflict) {
+      return callback({ success: false, message: 'Username is already taken. Please try another.' });
+    }
+
+    userRecord.name = cleanName;
+    userRecord.username = cleanUser;
+    userRecord.hasCompletedOnboarding = true;
+
+    const active = activeUsers.get(socket.id);
+    if (active) {
+      active.name = cleanName;
+      active.username = cleanUser;
+    }
+
+    saveStore();
+    broadcastServerPresence();
+
+    return callback({
+      success: true,
+      user: userRecord
+    });
+  });
+
+  // Update User Profile (Display Name / Username / Avatar Color / Avatar Picture / Telegram)
+  socket.on('user:update', ({ name, username, avatarColor, avatarUrl, isTelegramVerified, telegramPhone }) => {
     const user = activeUsers.get(socket.id);
     if (!user) return;
     if (name) user.name = name;
@@ -766,12 +915,32 @@ io.on('connection', (socket) => {
     if (isTelegramVerified !== undefined) user.isTelegramVerified = !!isTelegramVerified;
     if (telegramPhone !== undefined) user.telegramPhone = telegramPhone;
 
+    if (username && typeof username === 'string') {
+      const cleanUser = username.trim().toLowerCase();
+      if (/^[a-z0-9_.]{2,32}$/.test(cleanUser) && !cleanUser.startsWith('.') && !cleanUser.endsWith('.') && !cleanUser.includes('..')) {
+        const conflict = Object.values(db.users || {}).find(u => u.userId !== user.userId && u.username && u.username.toLowerCase() === cleanUser);
+        if (!conflict) {
+          user.username = cleanUser;
+        }
+      }
+    }
+
+    if (db.users && db.users[user.userId]) {
+      const dbUser = db.users[user.userId];
+      if (name) dbUser.name = name;
+      if (user.username) dbUser.username = user.username;
+      if (avatarColor) dbUser.avatarColor = avatarColor;
+      if (avatarUrl !== undefined) dbUser.avatarUrl = avatarUrl;
+      saveStore();
+    }
+
     broadcastServerPresence();
     if (user.voiceChannelId) {
       io.to(`voice:${user.voiceChannelId}`).emit('voice:user_updated', {
         socketId: socket.id,
         userId: user.userId,
         name: user.name,
+        username: user.username,
         avatarColor: user.avatarColor,
         avatarUrl: user.avatarUrl || null
       });
@@ -897,15 +1066,21 @@ io.on('connection', (socket) => {
       const displayName = tgUser.firstName ? (tgUser.firstName + (tgUser.lastName ? ' ' + tgUser.lastName : '')) : (tgUser.username || (session.phone ? ('User_' + session.phone.slice(-4)) : ('User_' + cleanTarget)));
 
       if (!userRecord) {
+        let defaultHandle = (tgUser.username ? tgUser.username.toLowerCase().replace(/[^a-z0-9_.]/g, '') : (session.phone ? ('user_' + session.phone.slice(-4)) : ('user_' + cleanTarget.slice(-4)))) || ('user_' + Math.floor(1000 + Math.random() * 9000));
+        if (Object.values(db.users).some(u => u.username && u.username.toLowerCase() === defaultHandle)) {
+          defaultHandle = `${defaultHandle}_${Math.floor(100 + Math.random() * 900)}`;
+        }
         userRecord = {
           userId: 'usr-' + Math.random().toString(36).substring(2, 9),
           name: displayName,
+          username: defaultHandle,
           avatarColor: '#24A1DE',
           avatarUrl: null,
           telegramId: tgId,
           telegramUsername: tgUser.username || cleanTarget,
           telegramPhone: session.phone || null,
           isTelegramVerified: true,
+          hasCompletedOnboarding: false,
           createdAt: Date.now()
         };
         db.users[userRecord.userId] = userRecord;
@@ -913,9 +1088,15 @@ io.on('connection', (socket) => {
         userRecord.name = displayName;
         userRecord.telegramId = tgId;
         userRecord.telegramUsername = tgUser.username || userRecord.telegramUsername || cleanTarget;
+        if (!userRecord.username) {
+          userRecord.username = userRecord.telegramUsername ? userRecord.telegramUsername.toLowerCase().replace(/[^a-z0-9_.]/g, '') : ('user_' + tgId.slice(-4));
+        }
         if (session.phone) userRecord.telegramPhone = session.phone;
         userRecord.isTelegramVerified = true;
         userRecord.lastLogin = Date.now();
+        if (userRecord.hasCompletedOnboarding === undefined) {
+          userRecord.hasCompletedOnboarding = true;
+        }
       }
 
       // Fetch avatar photo if available
@@ -1030,6 +1211,7 @@ function broadcastServerPresence() {
       socketId: user.socketId,
       userId: user.userId,
       name: user.name,
+      username: user.username || (db.users && db.users[user.userId] && db.users[user.userId].username) || null,
       nickname: nickname,
       role: role,
       avatarColor: user.avatarColor,
@@ -1170,14 +1352,20 @@ async function handleBotUpdate(update) {
   const displayName = from.first_name ? (from.first_name + (from.last_name ? ' ' + from.last_name : '')) : (from.username || ('User_' + tgId.slice(-4)));
 
   if (!userRecord) {
+    let defaultHandle = (from.username ? from.username.toLowerCase().replace(/[^a-z0-9_.]/g, '') : ('user_' + tgId.slice(-4))) || ('user_' + tgId.slice(-4));
+    if (Object.values(db.users).some(u => u.username && u.username.toLowerCase() === defaultHandle)) {
+      defaultHandle = `${defaultHandle}_${Math.floor(100 + Math.random() * 900)}`;
+    }
     userRecord = {
       userId: 'usr-' + Math.random().toString(36).substring(2, 9),
       name: displayName,
+      username: defaultHandle,
       avatarColor: '#24A1DE',
       avatarUrl: null,
       telegramId: tgId,
       telegramUsername: from.username || null,
       isTelegramVerified: true,
+      hasCompletedOnboarding: false,
       createdAt: Date.now()
     };
     db.users[userRecord.userId] = userRecord;
@@ -1185,8 +1373,14 @@ async function handleBotUpdate(update) {
     userRecord.name = displayName;
     userRecord.telegramId = tgId;
     userRecord.telegramUsername = from.username || null;
+    if (!userRecord.username) {
+      userRecord.username = from.username ? from.username.toLowerCase().replace(/[^a-z0-9_.]/g, '') : ('user_' + tgId.slice(-4));
+    }
     userRecord.isTelegramVerified = true;
     userRecord.lastLogin = Date.now();
+    if (userRecord.hasCompletedOnboarding === undefined) {
+      userRecord.hasCompletedOnboarding = true;
+    }
   }
 
   // Fetch avatar photo if available

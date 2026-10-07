@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Permanent Telegram-verified users bypass the splash on reload.
         // Demo guest sessions do not auto-trap the user on reload so you can always use demo again!
         if (parsed && parsed.userId && parsed.isTelegramVerified && !parsed.isDemoUser) {
+          if (parsed.hasCompletedOnboarding === false) {
+            return null;
+          }
           return parsed;
         }
       } catch (e) {}
@@ -66,11 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('user:register', {
       userId: user.userId,
       name: user.name,
+      username: user.username || null,
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl,
       isTelegramVerified: !!user.isTelegramVerified,
       telegramPhone: user.telegramPhone || null,
       telegramUsername: user.telegramUsername || null,
+      hasCompletedOnboarding: user.hasCompletedOnboarding !== undefined ? user.hasCompletedOnboarding : true,
       serverId: inviteServerId || 'friends-hangout'
     });
   }
@@ -226,16 +231,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return defaultUser;
   }
 
-  function updateUserProfile(name, avatarColor, avatarUrl) {
+  function updateUserProfile(name, avatarColor, avatarUrl, username) {
     user.name = name || user.name;
     user.avatarColor = avatarColor || user.avatarColor;
     if (avatarUrl !== undefined) {
       user.avatarUrl = avatarUrl;
     }
+    if (username) {
+      user.username = username;
+    }
     voiceManager.user = user;
     localStorage.setItem('cordlite_user', JSON.stringify(user));
     socket.emit('user:update', {
       name: user.name,
+      username: user.username || null,
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl,
       isTelegramVerified: user.isTelegramVerified || false,
@@ -264,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
       userTgBadge.style.display = 'inline-flex';
     }
     if (userSubtext) {
-      userSubtext.textContent = user.telegramPhone ? `TG: ${user.telegramPhone}` : 'Online';
+      userSubtext.textContent = user.username ? `@${user.username}` : (user.telegramPhone ? `TG: ${user.telegramPhone}` : 'Online');
     }
 
     const userBar = document.querySelector('.user-bar');
@@ -555,9 +564,22 @@ document.addEventListener('DOMContentLoaded', () => {
     closeReactionPicker();
   });
 
-  // Bootstrap gating: show splash or main app based on session
+  // Bootstrap gating: show splash, onboarding, or main app based on session
   initLoginSplash();
-  if (isSplashVisible) {
+  const rawSaved = localStorage.getItem('cordlite_user');
+  let pendingOnboardingUser = null;
+  if (rawSaved) {
+    try {
+      const p = JSON.parse(rawSaved);
+      if (p && p.userId && p.isTelegramVerified && p.hasCompletedOnboarding === false && !p.isDemoUser) {
+        pendingOnboardingUser = p;
+      }
+    } catch (e) {}
+  }
+
+  if (pendingOnboardingUser) {
+    showOnboardingFlow(pendingOnboardingUser);
+  } else if (isSplashVisible) {
     showLoginSplash();
   } else {
     showMainApp(user);
@@ -1692,7 +1714,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const authorDisplayName = msg.user.nickname || msg.user.name;
     const authorRoleBadge = renderRoleBadge(msg.user.role);
-    const authorHandleHtml = msg.user.nickname ? `<span class="user-username-sub">(@${escapeHtml(msg.user.name)})</span>` : '';
+    const authorHandleHtml = msg.user.username ? `<span class="user-username-sub">(@${escapeHtml(msg.user.username)})</span>` : (msg.user.nickname ? `<span class="user-username-sub">(@${escapeHtml(msg.user.name)})</span>` : '');
     const authorTgBadge = msg.user.isTelegramVerified ? `<span class="tg-verified-icon" title="Telegram Verified">${window.ICONS.telegramBadge}</span>` : '';
 
     card.innerHTML = `
@@ -1922,6 +1944,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let subTitle = '';
       if (m.voiceChannelId) {
         subTitle = 'In Voice';
+      } else if (m.username) {
+        subTitle = `@${escapeHtml(m.username)}`;
       } else if (m.nickname && m.nickname !== m.name) {
         subTitle = `@${escapeHtml(m.name)}`;
       } else if (m.role && m.role !== 'member') {
@@ -2364,6 +2388,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnUserSettings.onclick = () => {
     document.getElementById('input-profile-name').value = user.name;
+    const inputSettingsUser = document.getElementById('input-profile-username');
+    const settingsHandlePreview = document.getElementById('profile-card-handle-preview');
+    const settingsFeedback = document.getElementById('settings-username-feedback');
+    const settingsIcon = document.getElementById('settings-username-status-icon');
+    if (inputSettingsUser) {
+      inputSettingsUser.value = (user && user.username) || '';
+      if (settingsFeedback) { settingsFeedback.className = 'username-feedback-msg'; settingsFeedback.textContent = ''; }
+      if (settingsIcon) settingsIcon.innerHTML = '';
+      const wrap = inputSettingsUser.closest('.username-input-wrapper');
+      if (wrap) wrap.classList.remove('is-valid', 'is-invalid');
+    }
+    if (settingsHandlePreview) {
+      settingsHandlePreview.textContent = (user && user.username) ? `@${user.username}` : '@username';
+    }
+
     tempAvatarUrl = user.avatarUrl || null;
     selectedProfileColor = user.avatarColor;
 
@@ -2661,6 +2700,70 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  const inputProfileUsernameEl = document.getElementById('input-profile-username');
+  let settingsUsernameValid = true;
+  let settingsDebounceTimer = null;
+
+  if (inputProfileUsernameEl) {
+    inputProfileUsernameEl.oninput = () => {
+      const raw = inputProfileUsernameEl.value.trim().toLowerCase();
+      const sanitized = raw.replace(/[^a-z0-9_.]/g, '');
+      if (inputProfileUsernameEl.value !== sanitized) inputProfileUsernameEl.value = sanitized;
+      const preview = document.getElementById('profile-card-handle-preview');
+      if (preview) preview.textContent = sanitized ? `@${sanitized}` : '@username';
+
+      const feedback = document.getElementById('settings-username-feedback');
+      const icon = document.getElementById('settings-username-status-icon');
+      const wrap = inputProfileUsernameEl.closest('.username-input-wrapper');
+
+      if (settingsDebounceTimer) clearTimeout(settingsDebounceTimer);
+
+      if (!sanitized) {
+        settingsUsernameValid = false;
+        if (wrap) { wrap.classList.remove('is-valid'); wrap.classList.add('is-invalid'); }
+        if (feedback) { feedback.className = 'username-feedback-msg show invalid'; feedback.textContent = 'Username cannot be blank.'; }
+        if (icon) icon.innerHTML = window.ICONS.errorCircle;
+        return;
+      }
+
+      if (sanitized === (user && user.username)) {
+        settingsUsernameValid = true;
+        if (wrap) wrap.classList.remove('is-valid', 'is-invalid');
+        if (feedback) { feedback.className = 'username-feedback-msg'; feedback.textContent = ''; }
+        if (icon) icon.innerHTML = '';
+        return;
+      }
+
+      if (sanitized.length < 2 || sanitized.length > 32 || sanitized.startsWith('.') || sanitized.endsWith('.') || sanitized.includes('..')) {
+        settingsUsernameValid = false;
+        if (wrap) { wrap.classList.remove('is-valid'); wrap.classList.add('is-invalid'); }
+        if (feedback) { feedback.className = 'username-feedback-msg show invalid'; feedback.textContent = '2-32 lowercase letters, numbers, periods, and underscores.'; }
+        if (icon) icon.innerHTML = window.ICONS.errorCircle;
+        return;
+      }
+
+      if (feedback) { feedback.className = 'username-feedback-msg show checking'; feedback.textContent = 'Checking availability...'; }
+      if (icon) icon.innerHTML = window.ICONS.spinner;
+
+      settingsDebounceTimer = setTimeout(() => {
+        socket.emit('user:check_username', { username: sanitized, currentUserId: user.userId }, (res) => {
+          if (inputProfileUsernameEl.value.trim().toLowerCase() !== sanitized) return;
+          if (res && res.available) {
+            settingsUsernameValid = true;
+            if (wrap) { wrap.classList.remove('is-invalid'); wrap.classList.add('is-valid'); }
+            if (feedback) { feedback.className = 'username-feedback-msg show valid'; feedback.textContent = 'Username is available!'; }
+            if (icon) icon.innerHTML = window.ICONS.checkCircle;
+          } else {
+            settingsUsernameValid = false;
+            if (wrap) { wrap.classList.remove('is-valid'); wrap.classList.add('is-invalid'); }
+            if (feedback) { feedback.className = 'username-feedback-msg show invalid'; feedback.textContent = (res && res.message) || 'Username is already taken.'; }
+            if (icon) icon.innerHTML = window.ICONS.errorCircle;
+          }
+        });
+      }, 250);
+    };
+  }
+
   // Settings Modal Open Sync
   const origBtnUserSettingsClick = btnUserSettings ? btnUserSettings.onclick : null;
   if (btnUserSettings) {
@@ -2681,8 +2784,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-save-profile').onclick = () => {
     const newName = document.getElementById('input-profile-name').value.trim();
+    const newUsernameInput = document.getElementById('input-profile-username');
+    const newUsername = newUsernameInput ? newUsernameInput.value.trim().toLowerCase() : '';
+
+    if (!settingsUsernameValid) {
+      showToast('Please fix username issues before saving');
+      return;
+    }
+
     if (newName) {
-      updateUserProfile(newName, selectedProfileColor, tempAvatarUrl);
+      updateUserProfile(newName, selectedProfileColor, tempAvatarUrl, newUsername || null);
       voiceManager.setInputMode(currentInputMode);
       voiceManager.pttKey = currentPttKey;
       localStorage.setItem('cordlite_ptt_key', currentPttKey);
@@ -2968,6 +3079,203 @@ document.addEventListener('DOMContentLoaded', () => {
   initQuickSwitcher();
 
   // ==========================================================================
+  // First-Time Registration Onboarding Handler
+  // Choose Display Name (non-unique) & Username (unique handle)
+  // Demo Mode completely bypasses this flow.
+  // ==========================================================================
+  function showOnboardingFlow(pendingUser) {
+    const modalOnboarding = document.getElementById('modal-onboarding');
+    const inputDisplayName = document.getElementById('input-onboarding-display-name');
+    const inputUsername = document.getElementById('input-onboarding-username');
+    const previewName = document.getElementById('onboarding-preview-name');
+    const previewHandle = document.getElementById('onboarding-preview-handle');
+    const avatarText = document.getElementById('onboarding-avatar-text');
+    const avatarImg = document.getElementById('onboarding-avatar-img');
+    const avatarWrap = document.getElementById('onboarding-avatar-preview');
+    const usernameFeedback = document.getElementById('onboarding-username-feedback');
+    const usernameStatusIcon = document.getElementById('onboarding-username-status-icon');
+    const usernameWrapper = inputUsername ? inputUsername.closest('.username-input-wrapper') : null;
+    const btnSubmit = document.getElementById('btn-submit-onboarding');
+
+    if (!modalOnboarding || !inputDisplayName || !inputUsername) return;
+
+    // Hide login splash
+    const splash = document.getElementById('tg-login-splash');
+    if (splash) splash.style.display = 'none';
+
+    // Seed initial values
+    const initialName = (pendingUser.name || 'User').trim();
+    let initialUsername = (pendingUser.username || pendingUser.telegramUsername || 'user')
+      .toLowerCase()
+      .replace(/[^a-z0-9_.]/g, '');
+    if (initialUsername.length < 2) initialUsername = 'user_' + Math.floor(100 + Math.random() * 900);
+
+    inputDisplayName.value = initialName;
+    inputUsername.value = initialUsername;
+
+    // Update avatar preview
+    if (avatarWrap) {
+      if (pendingUser.avatarUrl) {
+        if (avatarImg) { avatarImg.src = pendingUser.avatarUrl; avatarImg.style.display = 'block'; }
+        if (avatarText) avatarText.style.display = 'none';
+        avatarWrap.style.backgroundColor = 'transparent';
+      } else {
+        if (avatarImg) avatarImg.style.display = 'none';
+        if (avatarText) {
+          avatarText.style.display = 'block';
+          avatarText.textContent = (initialName || 'U').charAt(0).toUpperCase();
+        }
+        avatarWrap.style.backgroundColor = pendingUser.avatarColor || '#5865F2';
+      }
+    }
+
+    if (previewName) previewName.textContent = initialName || 'Display Name';
+    if (previewHandle) previewHandle.textContent = `@${initialUsername}`;
+
+    let isUsernameValid = false;
+    let checkDebounceTimer = null;
+
+    function setUsernameState(state, message = '') {
+      if (!usernameFeedback || !usernameStatusIcon || !usernameWrapper) return;
+      usernameFeedback.className = 'username-feedback-msg show';
+      usernameWrapper.classList.remove('is-valid', 'is-invalid');
+
+      if (state === 'valid') {
+        isUsernameValid = true;
+        usernameWrapper.classList.add('is-valid');
+        usernameFeedback.classList.add('valid');
+        usernameFeedback.textContent = message || 'Username is available!';
+        usernameStatusIcon.innerHTML = window.ICONS.checkCircle;
+      } else if (state === 'invalid') {
+        isUsernameValid = false;
+        usernameWrapper.classList.add('is-invalid');
+        usernameFeedback.classList.add('invalid');
+        usernameFeedback.textContent = message || 'This username is unavailable.';
+        usernameStatusIcon.innerHTML = window.ICONS.errorCircle;
+      } else if (state === 'checking') {
+        isUsernameValid = false;
+        usernameFeedback.classList.add('checking');
+        usernameFeedback.textContent = 'Checking availability...';
+        usernameStatusIcon.innerHTML = window.ICONS.spinner;
+      } else {
+        isUsernameValid = false;
+        usernameFeedback.className = 'username-feedback-msg';
+        usernameFeedback.textContent = '';
+        usernameStatusIcon.innerHTML = '';
+      }
+
+      updateSubmitState();
+    }
+
+    function updateSubmitState() {
+      const nameVal = inputDisplayName.value.trim();
+      if (btnSubmit) {
+        btnSubmit.disabled = !isUsernameValid || nameVal.length === 0;
+      }
+    }
+
+    function validateAndCheckUsername() {
+      if (checkDebounceTimer) clearTimeout(checkDebounceTimer);
+
+      const raw = inputUsername.value.trim().toLowerCase();
+      const sanitized = raw.replace(/[^a-z0-9_.]/g, '');
+      if (inputUsername.value !== sanitized) {
+        inputUsername.value = sanitized;
+      }
+
+      if (previewHandle) {
+        previewHandle.textContent = sanitized ? `@${sanitized}` : '@username';
+      }
+
+      if (!sanitized) {
+        setUsernameState('invalid', 'Username cannot be blank.');
+        return;
+      }
+
+      if (sanitized.length < 2) {
+        setUsernameState('invalid', 'Username must be at least 2 characters.');
+        return;
+      }
+
+      if (sanitized.length > 32) {
+        setUsernameState('invalid', 'Username cannot exceed 32 characters.');
+        return;
+      }
+
+      if (sanitized.startsWith('.') || sanitized.endsWith('.') || sanitized.includes('..')) {
+        setUsernameState('invalid', 'Cannot start/end with a period or have consecutive periods.');
+        return;
+      }
+
+      setUsernameState('checking');
+
+      checkDebounceTimer = setTimeout(() => {
+        socket.emit('user:check_username', { username: sanitized, currentUserId: pendingUser.userId }, (res) => {
+          if (inputUsername.value.trim().toLowerCase() !== sanitized) return;
+          if (res && res.available) {
+            setUsernameState('valid', 'Username is available!');
+          } else {
+            setUsernameState('invalid', (res && res.message) || 'This username is already taken.');
+          }
+        });
+      }, 250);
+    }
+
+    inputDisplayName.oninput = () => {
+      const val = inputDisplayName.value.trim();
+      if (previewName) previewName.textContent = val || 'Display Name';
+      if (!pendingUser.avatarUrl && avatarText) {
+        avatarText.textContent = (val || 'U').charAt(0).toUpperCase();
+      }
+      updateSubmitState();
+    };
+
+    inputUsername.oninput = validateAndCheckUsername;
+
+    validateAndCheckUsername();
+
+    const submitHandler = (e) => {
+      if (e) e.preventDefault();
+      const finalName = inputDisplayName.value.trim();
+      const finalUsername = inputUsername.value.trim().toLowerCase();
+      if (!isUsernameValid || !finalName || !finalUsername) return;
+
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Setting up account...';
+      }
+
+      socket.emit('user:complete_onboarding', {
+        userId: pendingUser.userId,
+        displayName: finalName,
+        username: finalUsername
+      }, (res) => {
+        if (btnSubmit) {
+          btnSubmit.textContent = 'Finish & Enter CordLite';
+        }
+
+        if (res && res.success && res.user) {
+          closeModal(modalOnboarding);
+          const finishedUser = res.user;
+          finishedUser.isTelegramVerified = true;
+          localStorage.setItem('cordlite_user', JSON.stringify(finishedUser));
+          showMainApp(finishedUser);
+          showToast(`Welcome to CordLite, ${finishedUser.name}! (@${finishedUser.username})`);
+        } else {
+          if (btnSubmit) btnSubmit.disabled = false;
+          setUsernameState('invalid', (res && res.message) || 'Failed to complete registration.');
+        }
+      });
+    };
+
+    const formOnboarding = document.getElementById('form-onboarding');
+    if (formOnboarding) formOnboarding.onsubmit = submitHandler;
+    if (btnSubmit) btnSubmit.onclick = submitHandler;
+
+    openModal(modalOnboarding);
+  }
+
+  // ==========================================================================
   // Telegram Login Splash Handler
   // ==========================================================================
   function initLoginSplash() {
@@ -3210,11 +3518,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const demoUser = {
           userId: 'usr-guest-' + Math.random().toString(36).substring(2, 9),
           name: displayName,
+          username: 'guest_' + guestIdNum,
           avatarColor: randomColor,
           avatarUrl: null,
           telegramUsername: rawInput ? ('demo_' + rawInput.toLowerCase().replace(/[^a-z0-9_]/g, '')) : ('guest_' + guestIdNum),
           isTelegramVerified: true,
           isDemoUser: true,
+          hasCompletedOnboarding: true,
           createdAt: Date.now()
         };
 
@@ -3260,10 +3570,17 @@ document.addEventListener('DOMContentLoaded', () => {
       try { sessionStorage.removeItem('cordlite_tg_session_id'); } catch (e) {}
       const verifiedUser = data.user;
       verifiedUser.isTelegramVerified = true;
-      localStorage.setItem('cordlite_user', JSON.stringify(verifiedUser));
       if (resendInterval) clearInterval(resendInterval);
-      showMainApp(verifiedUser);
-      showToast('Welcome, ' + verifiedUser.name + '!');
+
+      // Check if user needs first-time onboarding (display name & unique username)
+      if (verifiedUser.hasCompletedOnboarding === false) {
+        localStorage.setItem('cordlite_user', JSON.stringify(verifiedUser));
+        showOnboardingFlow(verifiedUser);
+      } else {
+        localStorage.setItem('cordlite_user', JSON.stringify(verifiedUser));
+        showMainApp(verifiedUser);
+        showToast('Welcome, ' + verifiedUser.name + '!');
+      }
     });
   }
 });

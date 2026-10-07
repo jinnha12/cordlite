@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="/css/style.css?v=30" />
+  <link rel="stylesheet" href="/css/style.css?v=31" />
 </head>
 <body>
   <!-- Telegram Login Splash Screen -->
@@ -482,6 +482,7 @@
                 </div>
                 <div class="profile-card-identity">
                   <div class="profile-card-name" id="profile-card-name-preview">User</div>
+                  <div class="profile-card-handle" id="profile-card-handle-preview" style="font-size: 13px; color: var(--text-muted); font-weight: 500; margin-top: 1px;">@username</div>
                   <div class="profile-card-status">Online</div>
                 </div>
               </div>
@@ -490,8 +491,24 @@
             <!-- Profile Fields Card -->
             <div class="settings-card">
               <div class="form-group">
-                <label class="form-label" for="input-profile-name">Display Name</label>
-                <input class="form-input" id="input-profile-name" maxlength="24" placeholder="Your display name" />
+                <label class="form-label" for="input-profile-name">
+                  <span>Display Name</span>
+                  <span class="label-hint">What others see</span>
+                </label>
+                <input class="form-input" id="input-profile-name" maxlength="32" placeholder="Your display name" />
+              </div>
+
+              <div class="form-group" style="margin-top: 14px;">
+                <label class="form-label" for="input-profile-username">
+                  <span>Username</span>
+                  <span class="label-badge-unique">UNIQUE</span>
+                </label>
+                <div class="username-input-wrapper">
+                  <span class="username-at-prefix">@</span>
+                  <input class="form-input username-field" id="input-profile-username" maxlength="32" placeholder="username" spellcheck="false" autocomplete="off" />
+                  <div class="username-status-icon" id="settings-username-status-icon"></div>
+                </div>
+                <div class="username-feedback-msg" id="settings-username-feedback"></div>
               </div>
 
               <div class="settings-divider"></div>
@@ -828,10 +845,91 @@
     </div>
   </div>
 
+  <!-- Modal: First-Time Registration Onboarding -->
+  <div class="modal-overlay onboarding-modal-overlay" id="modal-onboarding" style="display: none; z-index: 9999;">
+    <div class="onboarding-modal-window">
+      <!-- Modal Header -->
+      <div class="onboarding-modal-header">
+        <div class="onboarding-badge-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+          </svg>
+        </div>
+        <h2 class="onboarding-title">Welcome to CordLite!</h2>
+        <p class="onboarding-subtitle">Choose your display name and unique handle to get started.</p>
+      </div>
+
+      <!-- Live Profile Card Preview in Onboarding -->
+      <div class="onboarding-preview-card">
+        <div class="onboarding-avatar-preview" id="onboarding-avatar-preview">
+          <span id="onboarding-avatar-text">U</span>
+          <img id="onboarding-avatar-img" style="display: none;" alt="Avatar" />
+        </div>
+        <div class="onboarding-preview-details">
+          <div class="onboarding-preview-name" id="onboarding-preview-name">Display Name</div>
+          <div class="onboarding-preview-handle" id="onboarding-preview-handle">@username</div>
+        </div>
+        <div class="onboarding-status-pill">New Member</div>
+      </div>
+
+      <!-- Form -->
+      <form id="form-onboarding" onsubmit="return false;" class="onboarding-form">
+        <!-- 1. Display Name -->
+        <div class="form-group">
+          <label class="form-label" for="input-onboarding-display-name">
+            <span>Display Name</span>
+            <span class="label-hint">What friends see</span>
+          </label>
+          <input
+            class="form-input"
+            id="input-onboarding-display-name"
+            type="text"
+            maxlength="32"
+            placeholder="e.g. Jin Ha"
+            autocomplete="name"
+            required
+          />
+          <div class="form-help-text">This is how you appear in voice channels and chat. Anyone can have the same display name.</div>
+        </div>
+
+        <!-- 2. Unique Username -->
+        <div class="form-group">
+          <label class="form-label" for="input-onboarding-username">
+            <span>Username</span>
+            <span class="label-badge-unique">UNIQUE</span>
+          </label>
+          <div class="username-input-wrapper">
+            <span class="username-at-prefix">@</span>
+            <input
+              class="form-input username-field"
+              id="input-onboarding-username"
+              type="text"
+              maxlength="32"
+              placeholder="username"
+              autocomplete="username"
+              spellcheck="false"
+              required
+            />
+            <div class="username-status-icon" id="onboarding-username-status-icon"></div>
+          </div>
+          <div class="username-feedback-msg" id="onboarding-username-feedback"></div>
+          <div class="form-help-text">Your unique @handle. Only lowercase letters, numbers, periods, and underscores.</div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="onboarding-footer">
+          <button type="submit" class="btn-primary onboarding-submit-btn" id="btn-submit-onboarding" disabled>
+            Finish & Enter CordLite
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/icons.js?v=30"></script>
-  <script src="/js/audio-manager.js?v=30"></script>
-  <script src="/js/webrtc-voice.js?v=30"></script>
-  <script src="/js/app.js?v=30"></script>
+  <script src="/js/icons.js?v=31"></script>
+  <script src="/js/audio-manager.js?v=31"></script>
+  <script src="/js/webrtc-voice.js?v=31"></script>
+  <script src="/js/app.js?v=31"></script>
 </body>
 </html>

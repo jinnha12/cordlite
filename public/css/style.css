@@ -3972,3 +3972,292 @@ input:checked + .slider.round:before {
   50% { transform: scale(1.2); opacity: 1; }
   100% { transform: scale(0.9); opacity: 0.6; }
 }
+
+/* ========================================================
+   First-Time Registration Onboarding Flow
+   Authentic Discord Aesthetics, Clean Typography, Zero Emojis
+   ======================================================== */
+.onboarding-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.onboarding-modal-window {
+  background-color: #313338;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  width: 100%;
+  max-width: 480px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.onboarding-modal-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.onboarding-badge-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: rgba(88, 101, 242, 0.15);
+  color: var(--blurple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  box-shadow: 0 0 0 1px rgba(88, 101, 242, 0.25);
+}
+
+.onboarding-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-header);
+  margin-bottom: 6px;
+  letter-spacing: -0.2px;
+}
+
+.onboarding-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  max-width: 380px;
+}
+
+/* Onboarding Live Mini Preview Card */
+.onboarding-preview-card {
+  background-color: #2b2d31;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.onboarding-avatar-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--blurple);
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.onboarding-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.onboarding-preview-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.onboarding-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-header);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.onboarding-preview-handle {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.onboarding-status-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blurple);
+  background: rgba(88, 101, 242, 0.12);
+  border: 1px solid rgba(88, 101, 242, 0.25);
+  border-radius: 12px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+.onboarding-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.label-badge-unique {
+  background: rgba(88, 101, 242, 0.16);
+  color: var(--blurple);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+}
+
+.label-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: auto;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* Username input with @ prefix and status indicator */
+.username-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background-color: var(--bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.username-input-wrapper:focus-within {
+  border-color: var(--blurple);
+  box-shadow: 0 0 0 1px var(--blurple);
+}
+
+.username-input-wrapper.is-valid {
+  border-color: var(--green);
+}
+
+.username-input-wrapper.is-invalid {
+  border-color: var(--red);
+}
+
+.username-at-prefix {
+  padding-left: 12px;
+  padding-right: 2px;
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.username-field {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding-left: 4px !important;
+  padding-right: 36px !important;
+}
+
+.username-field:focus {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.username-status-icon {
+  position: absolute;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.username-status-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.username-feedback-msg {
+  font-size: 12px;
+  margin-top: 4px;
+  min-height: 16px;
+  display: none;
+  font-weight: 500;
+}
+
+.username-feedback-msg.show {
+  display: block;
+}
+
+.username-feedback-msg.valid {
+  color: var(--green);
+}
+
+.username-feedback-msg.invalid {
+  color: var(--red);
+}
+
+.username-feedback-msg.checking {
+  color: var(--text-muted);
+}
+
+.form-help-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.onboarding-footer {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.onboarding-submit-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.onboarding-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* User Profile Handle in Settings & Chat */
+.profile-card-handle {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.user-username-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
