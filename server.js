@@ -38,6 +38,10 @@ if (fs.existsSync(envPath)) {
   });
 }
 
+// Telegram Bot Configuration (defaults guarantee working auth in any environment including Render)
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8914847986:AAExEvy5VdB0SpgOo8Kz64_HzVJih3mYFSo';
+const TELEGRAM_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'Cordlite_bot';
+
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -90,7 +94,32 @@ const defaultState = {
       }
     ]
   },
-  users: {}
+  users: {
+    'usr-jin-admin': {
+      userId: 'usr-jin-admin',
+      name: 'Jin Ha',
+      avatarColor: '#24A1DE',
+      avatarUrl: null,
+      telegramId: '1478366521',
+      telegramUsername: 'jinnha12',
+      isTelegramVerified: true,
+      createdAt: 1791308379544
+    }
+  },
+  tgUsers: {
+    '1478366521': {
+      chatId: 1478366521,
+      firstName: 'Jin',
+      lastName: 'Ha',
+      username: 'jinnha12'
+    },
+    'jinnha12': {
+      chatId: 1478366521,
+      firstName: 'Jin',
+      lastName: 'Ha',
+      username: 'jinnha12'
+    }
+  }
 };
 
 let db = defaultState;
@@ -100,7 +129,9 @@ try {
     db = JSON.parse(raw);
     if (!db.servers) db.servers = defaultState.servers;
     if (!db.messages) db.messages = defaultState.messages;
-    if (!db.users) db.users = {};
+    if (!db.users) db.users = defaultState.users || {};
+    if (!db.tgUsers) db.tgUsers = Object.assign({}, defaultState.tgUsers);
+    else Object.assign(db.tgUsers, defaultState.tgUsers);
   } else {
     fs.writeFileSync(STORE_PATH, JSON.stringify(defaultState, null, 2));
   }
@@ -209,27 +240,64 @@ const pendingBotCodes = new Map(); // code -> sessionId
 
 io.on('connection', (socket) => {
   // Telegram Free Bot Auth: Request Session
-  socket.on('auth:bot:request_session', () => {
+  socket.on('auth:bot:request_session', ({ existingSessionId } = {}) => {
+    // If client provided an existing session that's still valid
+    if (existingSessionId && pendingBotSessions.has(existingSessionId)) {
+      const existing = pendingBotSessions.get(existingSessionId);
+      if (Date.now() < (existing.expiresAt || (existing.createdAt + 600000))) {
+        existing.socketId = socket.id;
+        if (existing.authenticated && existing.user) {
+          return socket.emit('auth:telegram:success', { user: existing.user });
+        }
+        return socket.emit('auth:bot:session_created', {
+          sessionId: existingSessionId,
+          code: existing.code,
+          botUsername: TELEGRAM_BOT_USERNAME,
+          botUrl: 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + existingSessionId
+        });
+      }
+    }
+
+    // Clean up stale sessions
     for (const [sId, sData] of pendingBotSessions.entries()) {
-      if (sData.socketId === socket.id) {
+      if (sData.socketId === socket.id || (sData.expiresAt && Date.now() > sData.expiresAt)) {
         pendingBotCodes.delete(sData.code);
         pendingBotSessions.delete(sId);
       }
     }
+
     const sessionId = 'cord_' + Math.random().toString(36).substring(2, 10);
     const codeNum = Math.floor(100000 + Math.random() * 900000).toString();
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Cordlite_bot';
-    const botUrl = 'https://t.me/' + botUsername + '?start=' + sessionId;
+    const botUrl = 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + sessionId;
 
-    pendingBotSessions.set(sessionId, { socketId: socket.id, code: codeNum, createdAt: Date.now() });
+    pendingBotSessions.set(sessionId, {
+      socketId: socket.id,
+      code: codeNum,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      authenticated: false,
+      user: null
+    });
     pendingBotCodes.set(codeNum, sessionId);
 
     socket.emit('auth:bot:session_created', {
       sessionId,
       code: codeNum,
-      botUsername,
+      botUsername: TELEGRAM_BOT_USERNAME,
       botUrl
     });
+  });
+
+  // Check if session has been authenticated (e.g. user approved in Telegram app and returned to tab)
+  socket.on('auth:bot:check_session', ({ sessionId }) => {
+    if (!sessionId) return;
+    const session = pendingBotSessions.get(sessionId);
+    if (session) {
+      session.socketId = socket.id;
+      if (session.authenticated && session.user) {
+        socket.emit('auth:telegram:success', { user: session.user });
+      }
+    }
   });
 
   // Register user profile
@@ -723,7 +791,7 @@ io.on('connection', (socket) => {
         });
       }
 
-      if (!db.tgUsers) db.tgUsers = {};
+      if (!db.tgUsers) db.tgUsers = Object.assign({}, defaultState.tgUsers || {});
 
       // Look up target in known Telegram users
       let tgUser = db.tgUsers[cleanTarget];
@@ -735,7 +803,7 @@ io.on('connection', (socket) => {
         );
       }
 
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'Cordlite_bot';
+      const botUsername = TELEGRAM_BOT_USERNAME;
 
       if (!tgUser || !tgUser.chatId) {
         return socket.emit('auth:telegram:send_code_error', {
@@ -837,7 +905,7 @@ io.on('connection', (socket) => {
       // Fetch avatar photo if available
       if (session.chatId) {
         try {
-          const token = process.env.TELEGRAM_BOT_TOKEN;
+          const token = TELEGRAM_BOT_TOKEN;
           const photoRes = await fetch('https://api.telegram.org/bot' + token + '/getUserProfilePhotos?user_id=' + session.chatId + '&limit=1');
           const photoData = await photoRes.json();
           if (photoData.ok && photoData.result && photoData.result.total_count > 0) {
@@ -890,12 +958,8 @@ io.on('connection', (socket) => {
 
   // Disconnect
   socket.on('disconnect', () => {
-    for (const [sId, sData] of pendingBotSessions.entries()) {
-      if (sData.socketId === socket.id) {
-        pendingBotCodes.delete(sData.code);
-        pendingBotSessions.delete(sId);
-      }
-    }
+    // Note: Do not immediately destroy pendingBotSessions on disconnect!
+    // Mobile browsers or tab switches can temporarily drop the WebSocket while opening Telegram.
     const user = activeUsers.get(socket.id);
     if (user) {
       if (user.voiceChannelId) {
@@ -1013,7 +1077,7 @@ function escapeHtml(str) {
 }
 
 async function sendBotMessage(chatId, text) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = TELEGRAM_BOT_TOKEN;
   if (!token) return;
   try {
     const res = await fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
@@ -1039,7 +1103,7 @@ async function handleBotUpdate(update) {
 
   console.log('[Telegram Bot] Received from ' + from.first_name + ' (@' + (from.username || 'none') + ', ID: ' + from.id + '): "' + text + '"');
   // Automatically record known Telegram user so we can deliver codes to them!
-  if (!db.tgUsers) db.tgUsers = {};
+  if (!db.tgUsers) db.tgUsers = Object.assign({}, defaultState.tgUsers || {});
   const userEntry = { chatId: from.id, firstName: from.first_name || '', lastName: from.last_name || '', username: from.username || null };
   if (from.username) {
     db.tgUsers[from.username.toLowerCase()] = userEntry;
@@ -1080,9 +1144,6 @@ async function handleBotUpdate(update) {
   const session = pendingBotSessions.get(matchedSessionId);
   if (!session) return;
 
-  pendingBotSessions.delete(matchedSessionId);
-  pendingBotCodes.delete(session.code);
-
   const targetSocket = io.sockets.sockets.get(session.socketId);
   console.log('[Telegram Bot] Successfully paired session ' + matchedSessionId + ' (socket: ' + session.socketId + ', socketConnected: ' + !!targetSocket + ')');
 
@@ -1114,7 +1175,7 @@ async function handleBotUpdate(update) {
 
   // Fetch avatar photo if available
   try {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const token = TELEGRAM_BOT_TOKEN;
     const photoRes = await fetch('https://api.telegram.org/bot' + token + '/getUserProfilePhotos?user_id=' + from.id + '&limit=1');
     const photoData = await photoRes.json();
     if (photoData.ok && photoData.result && photoData.result.total_count > 0) {
@@ -1131,6 +1192,16 @@ async function handleBotUpdate(update) {
   }
 
   saveStore();
+
+  // Mark session as authenticated and attach user record for subsequent reconnect or polling
+  session.authenticated = true;
+  session.user = userRecord;
+
+  // Clean up session after 2 minutes grace period
+  setTimeout(() => {
+    pendingBotSessions.delete(matchedSessionId);
+    pendingBotCodes.delete(session.code);
+  }, 120000);
 
   await sendBotMessage(from.id, '✅ <b>Successfully signed into CordLite!</b>\n\nWelcome, <b>' + escapeHtml(userRecord.name) + '</b>. You can now return to your browser window.');
 
@@ -1150,12 +1221,12 @@ async function handleBotUpdate(update) {
 }
 
 async function startTelegramBotPolling() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.log('[Telegram Bot] No TELEGRAM_BOT_TOKEN set.');
     return;
   }
-  console.log('[Telegram Bot] Free bot polling active for @' + (process.env.TELEGRAM_BOT_USERNAME || 'bot'));
+  console.log('[Telegram Bot] Free bot polling active for @' + TELEGRAM_BOT_USERNAME);
 
   while (true) {
     try {
@@ -1167,6 +1238,9 @@ async function startTelegramBotPolling() {
           await handleBotUpdate(update);
         }
       } else {
+        if (data.error_code === 409) {
+          console.warn('[Telegram Bot] ⚠️ Polling conflict (409): Another server instance is running getUpdates.');
+        }
         await new Promise(r => setTimeout(r, 2000));
       }
     } catch (err) {

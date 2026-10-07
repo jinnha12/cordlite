@@ -2882,13 +2882,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentTargetUsername = '';
     let resendInterval = null;
+    let currentSessionId = sessionStorage.getItem('cordlite_tg_session_id') || null;
+    let pollInterval = null;
 
     // Request active 1-click Telegram Bot session
     function requestBotSession() {
       if (socket && socket.connected) {
-        socket.emit('auth:bot:request_session');
+        socket.emit('auth:bot:request_session', { existingSessionId: currentSessionId });
       }
     }
+
+    // Check session status (useful when returning from Telegram app)
+    function checkBotSession() {
+      if (socket && socket.connected && currentSessionId && isSplashVisible) {
+        socket.emit('auth:bot:check_session', { sessionId: currentSessionId });
+      }
+    }
+
+    // Poll session check every 2.5s while splash is visible
+    if (!pollInterval) {
+      pollInterval = setInterval(checkBotSession, 2500);
+    }
+
+    // When tab/window regains focus or visibility (user returns from Telegram app)
+    window.addEventListener('focus', checkBotSession);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkBotSession();
+    });
 
     socket.on('connect', () => {
       if (isSplashVisible) {
@@ -2897,6 +2917,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('auth:bot:session_created', (data) => {
+      currentSessionId = data.sessionId;
+      try { sessionStorage.setItem('cordlite_tg_session_id', data.sessionId); } catch (e) {}
+
       if (btnOneClick && data.botUrl) {
         btnOneClick.href = data.botUrl;
       }
@@ -3064,6 +3087,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('auth:telegram:success', (data) => {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      try { sessionStorage.removeItem('cordlite_tg_session_id'); } catch (e) {}
       const verifiedUser = data.user;
       verifiedUser.isTelegramVerified = true;
       localStorage.setItem('cordlite_user', JSON.stringify(verifiedUser));
@@ -3072,6 +3097,4 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Welcome, ' + verifiedUser.name + '!');
     });
   }
-
-  initLoginSplash();
 });
