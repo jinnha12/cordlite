@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="/css/style.css?v=29" />
+  <link rel="stylesheet" href="/css/style.css?v=30" />
 </head>
 <body>
   <!-- Telegram Login Splash Screen -->
@@ -409,83 +409,143 @@
     </div>
   </div>
 
-  <!-- Modal: User Profile & Voice Settings -->
+  <!-- Modal: User Settings (Discord Professional 2-Column Architecture) -->
   <div class="modal-overlay" id="modal-profile">
     <div class="modal-window settings-modal-window">
-      <div class="modal-header">
-        <h2 class="modal-title">User Settings</h2>
-        <p class="modal-subtitle">Customize your profile, avatar, and voice input controls</p>
-      </div>
-      <div class="modal-body">
+      
+      <!-- Left Sidebar: Settings Navigation Tabs -->
+      <aside class="settings-sidebar">
+        <div class="settings-sidebar-header">User Settings</div>
         
-        <!-- Section: Profile & Avatar -->
-        <div class="settings-section">
-          <div class="settings-section-title">Profile Identity</div>
-          
-          <div class="form-group">
-            <label class="form-label" for="input-profile-name">Nickname / Display Name</label>
-            <input class="form-input" id="input-profile-name" maxlength="24" />
-          </div>
+        <nav class="settings-nav">
+          <button type="button" class="settings-tab-btn active" data-tab="profile">
+            <span class="settings-tab-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </span>
+            <span>My Profile</span>
+          </button>
 
-          <!-- Feature 3: Custom Avatar Upload -->
-          <div class="form-group">
-            <label class="form-label">Avatar Picture</label>
-            <div class="avatar-upload-row">
-              <div class="avatar-preview-box" id="avatar-preview-box">
-                <span id="avatar-preview-text">U</span>
-                <img id="avatar-preview-img" style="display: none;" alt="Avatar" />
-              </div>
-              <div class="avatar-upload-actions">
-                <input type="file" id="input-avatar-file" accept="image/*" style="display: none;" />
-                <button type="button" class="btn-secondary" id="btn-browse-avatar">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c1.65 0 3-1.35 3-3s-1.35-3-3-3-3 1.35-3 3 1.35 3 3 3zm0 2c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm9-8h-3.17L16 4H8L6.17 6H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 14H3V8h3.88l1.83-2h6.58l1.83 2H21v12z"/></svg>
-                  Upload Image
-                </button>
-                <button type="button" class="btn-secondary" id="btn-remove-avatar" style="display: none;">
-                  Remove
-                </button>
-              </div>
-            </div>
-          </div>
+          <button type="button" class="settings-tab-btn" data-tab="voice">
+            <span class="settings-tab-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+            </span>
+            <span>Voice & Audio</span>
+          </button>
 
-          <div class="form-group">
-            <label class="form-label">Fallback Color</label>
-            <div class="color-picker-row">
-              <div class="color-dot" data-color="#5865F2" style="background-color: #5865F2;"></div>
-              <div class="color-dot" data-color="#eb459e" style="background-color: #eb459e;"></div>
-              <div class="color-dot" data-color="#57f287" style="background-color: #57f287;"></div>
-              <div class="color-dot" data-color="#fee75c" style="background-color: #fee75c;"></div>
-              <div class="color-dot" data-color="#ed4245" style="background-color: #ed4245;"></div>
-              <div class="color-dot" data-color="#00a8fc" style="background-color: #00a8fc;"></div>
-            </div>
-          </div>
-        </div>
+          <button type="button" class="settings-tab-btn" data-tab="video">
+            <span class="settings-tab-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm9 3h-2v2H9v2h2v2h2v-2h2v-2h-2V9z"/><path d="M13 7l4 4-4 4v-3H9v-2h4V7z"/></svg>
+            </span>
+            <span>Screen Share</span>
+          </button>
+        </nav>
 
-        <!-- Section: Telegram Account in Settings -->
-        <div class="settings-section">
-          <div class="settings-section-title">Account</div>
-          <div class="tg-settings-status-box">
-            <div class="tg-status-left">
-              <span class="tg-status-icon" style="color: #24a1de; display: flex; align-items: center;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
-              </span>
-              <div class="tg-status-info">
-                <span class="tg-status-title" id="settings-account-phone">Connected</span>
-                <span class="tg-status-desc">Signed in via Telegram</span>
-              </div>
-            </div>
-            <button type="button" class="btn-secondary" id="btn-logout" style="font-size: 13px; padding: 6px 14px; color: var(--red); border-color: rgba(242, 63, 67, 0.4);">
-              Log Out
+        <div class="settings-sidebar-divider"></div>
+
+        <button type="button" class="settings-tab-btn settings-tab-danger" id="btn-logout">
+          <span class="settings-tab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+          </span>
+          <span>Log Out</span>
+        </button>
+      </aside>
+
+      <!-- Right Main Content Panel -->
+      <main class="settings-main-pane">
+        
+        <!-- Header with Title & Discord ESC Button -->
+        <div class="settings-pane-header">
+          <div class="settings-pane-titles">
+            <h2 class="settings-title" id="settings-title-display">My Profile</h2>
+            <p class="settings-subtitle" id="settings-subtitle-display">Customize how you appear to others across servers</p>
+          </div>
+          <div class="settings-esc-col">
+            <button type="button" class="settings-close-circle btn-close-modal" title="Close (ESC)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
+            <span class="settings-esc-label">ESC</span>
           </div>
         </div>
 
-        <!-- Section: Voice Input & Push-to-Talk (PTT) -->
-        <div class="settings-section">
-          <div class="settings-section-title">Voice & Input Mode</div>
+        <!-- Scrollable Tab Panes Container -->
+        <div class="settings-scroll-body">
           
-          <div class="form-group">
-            <label class="form-label">Input Mode</label>
+          <!-- TAB 1: Profile Identity -->
+          <div class="settings-tab-pane active" id="settings-pane-profile">
+            <!-- Discord User Preview Card -->
+            <div class="discord-profile-card-preview">
+              <div class="profile-card-banner" id="profile-card-banner"></div>
+              <div class="profile-card-body">
+                <div class="avatar-preview-box" id="avatar-preview-box">
+                  <span id="avatar-preview-text">U</span>
+                  <img id="avatar-preview-img" style="display: none;" alt="Avatar" />
+                </div>
+                <div class="profile-card-identity">
+                  <div class="profile-card-name" id="profile-card-name-preview">User</div>
+                  <div class="profile-card-status">Online</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Profile Fields Card -->
+            <div class="settings-card">
+              <div class="form-group">
+                <label class="form-label" for="input-profile-name">Display Name</label>
+                <input class="form-input" id="input-profile-name" maxlength="24" placeholder="Your display name" />
+              </div>
+
+              <div class="settings-divider"></div>
+
+              <div class="form-group">
+                <label class="form-label">Avatar</label>
+                <div class="avatar-upload-actions">
+                  <input type="file" id="input-avatar-file" accept="image/*" style="display: none;" />
+                  <button type="button" class="btn-discord-secondary" id="btn-browse-avatar">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c1.65 0 3-1.35 3-3s-1.35-3-3-3-3 1.35-3 3 1.35 3 3 3zm0 2c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm9-8h-3.17L16 4H8L6.17 6H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 14H3V8h3.88l1.83-2h6.58l1.83 2H21v12z"/></svg>
+                    Change Avatar
+                  </button>
+                  <button type="button" class="btn-discord-danger-outline" id="btn-remove-avatar" style="display: none;">
+                    Remove Avatar
+                  </button>
+                </div>
+              </div>
+
+              <div class="settings-divider"></div>
+
+              <div class="form-group">
+                <label class="form-label">Profile Accent Color</label>
+                <div class="color-picker-row">
+                  <div class="color-dot" data-color="#5865F2" style="background-color: #5865F2;"></div>
+                  <div class="color-dot" data-color="#eb459e" style="background-color: #eb459e;"></div>
+                  <div class="color-dot" data-color="#57f287" style="background-color: #57f287;"></div>
+                  <div class="color-dot" data-color="#fee75c" style="background-color: #fee75c;"></div>
+                  <div class="color-dot" data-color="#ed4245" style="background-color: #ed4245;"></div>
+                  <div class="color-dot" data-color="#00a8fc" style="background-color: #00a8fc;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Connected Account Card -->
+            <div class="settings-section-heading">Connected Account</div>
+            <div class="settings-card">
+              <div class="account-status-row">
+                <div class="account-status-left">
+                  <div class="account-provider-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#24a1de"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                  </div>
+                  <div>
+                    <div class="account-user-tag" id="settings-account-phone">Connected</div>
+                    <div class="account-user-desc">Authenticated Telegram Account</div>
+                  </div>
+                </div>
+                <span class="account-verified-pill">Active</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: Voice & Audio Settings -->
+          <div class="settings-tab-pane" id="settings-pane-voice">
+            <div class="settings-section-heading">Input Mode</div>
             <div class="radio-cards input-mode-cards">
               <div class="radio-card selected" id="opt-mode-vad" data-mode="vad">
                 <span class="radio-card-icon">
@@ -493,7 +553,7 @@
                 </span>
                 <div class="radio-card-info">
                   <span class="radio-card-title">Voice Activity</span>
-                  <span class="radio-card-desc">Transmits automatically when you speak</span>
+                  <span class="radio-card-desc">Automatically transmits when voice is detected</span>
                 </div>
               </div>
 
@@ -503,28 +563,31 @@
                 </span>
                 <div class="radio-card-info">
                   <span class="radio-card-title">Push to Talk</span>
-                  <span class="radio-card-desc">Only transmits audio while holding a key</span>
+                  <span class="radio-card-desc">Transmits audio only while holding a key</span>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="form-group" id="ptt-keybind-group" style="display: none;">
-            <label class="form-label" for="btn-ptt-keybind">PTT Shortcut Key</label>
-            <div class="ptt-keybind-row">
-              <button type="button" class="btn-secondary" id="btn-ptt-keybind">
-                <span id="ptt-keybind-text">Space</span>
-              </button>
-              <span class="ptt-hint">Click button then press any key (e.g. Space or Caps Lock)</span>
+            <!-- PTT Keybind Box (shown when PTT active) -->
+            <div class="settings-card" id="ptt-keybind-group" style="display: none; margin-top: 14px;">
+              <div class="form-group">
+                <label class="form-label" for="btn-ptt-keybind">Shortcut Keybind</label>
+                <div class="ptt-keybind-row">
+                  <button type="button" class="btn-discord-secondary" id="btn-ptt-keybind">
+                    <span id="ptt-keybind-text">Space</span>
+                  </button>
+                  <span class="ptt-hint">Click keybind button then press any key to record</span>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <!-- Feature 3: Voice Sensitivity Gate & Mic Input Level Meter -->
-          <div class="form-group" style="margin-top: 14px;">
-            <label class="form-label">Input Sensitivity</label>
-            <div class="sensitivity-setting-card">
+            <div class="settings-section-heading" style="margin-top: 24px;">Input Sensitivity</div>
+            <div class="settings-card">
               <div class="sensitivity-toggle-row">
-                <span class="sensitivity-label">Automatically determine input sensitivity</span>
+                <div>
+                  <div class="sensitivity-label">Automatic Input Sensitivity</div>
+                  <div class="sensitivity-subtext">Automatically detects your voice and suppresses background noise</div>
+                </div>
                 <label class="switch">
                   <input type="checkbox" id="chk-auto-sensitivity" checked />
                   <span class="slider round"></span>
@@ -543,63 +606,67 @@
               </div>
 
               <div class="manual-sensitivity-row" id="manual-sensitivity-row" style="display: none;">
-                <label class="form-label" style="margin-bottom: 2px; font-size: 12px;" for="slider-sensitivity-gate">Sensitivity Threshold</label>
+                <label class="form-label" for="slider-sensitivity-gate">Manual Sensitivity Threshold</label>
                 <input type="range" class="form-slider" id="slider-sensitivity-gate" min="1" max="60" value="20" />
-                <div class="slider-hint">Drag right to filter out background noises and breathing.</div>
+                <div class="slider-hint">Drag right to filter out breathing, typing, or fan noise</div>
               </div>
 
-              <div style="margin-top: 6px;">
-                <button type="button" class="btn-secondary" id="btn-test-mic" style="font-size: 12px; padding: 6px 12px;">
-                  Test Microphone
+              <div style="margin-top: 14px;">
+                <button type="button" class="btn-discord-secondary" id="btn-test-mic">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+                  Let's Check
                 </button>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Section: Feature 3: Stream Quality & Resolution -->
-        <div class="settings-section">
-          <div class="settings-section-title">Screen Share Quality</div>
-          
-          <div class="form-group">
-            <label class="form-label">Streaming Resolution & Frame Rate</label>
+          <!-- TAB 3: Screen Share Quality -->
+          <div class="settings-tab-pane" id="settings-pane-video">
+            <div class="settings-section-heading">Streaming Resolution & Frame Rate</div>
             <div class="radio-cards input-mode-cards" id="stream-quality-cards">
               <div class="radio-card selected" id="opt-quality-720p30" data-quality="720p30">
                 <div class="radio-card-info">
                   <span class="radio-card-title">720p HD (30 FPS)</span>
-                  <span class="radio-card-desc">Standard crisp HD — balanced bandwidth</span>
+                  <span class="radio-card-desc">Standard balanced stream for smooth voice chat</span>
                 </div>
               </div>
 
               <div class="radio-card" id="opt-quality-1080p60" data-quality="1080p60">
                 <div class="radio-card-info">
                   <span class="radio-card-title">1080p FHD (60 FPS)</span>
-                  <span class="radio-card-desc">Ultra-smooth high FPS for games & video</span>
+                  <span class="radio-card-desc">Crystal clear 60 FPS for gaming and motion</span>
                 </div>
               </div>
 
               <div class="radio-card" id="opt-quality-480p15" data-quality="480p15">
                 <div class="radio-card-info">
                   <span class="radio-card-title">480p (15 FPS)</span>
-                  <span class="radio-card-desc">Bandwidth saver for slow connections</span>
+                  <span class="radio-card-desc">Data saver mode for low-bandwidth connections</span>
                 </div>
               </div>
 
               <div class="radio-card" id="opt-quality-source" data-quality="source">
                 <div class="radio-card-info">
                   <span class="radio-card-title">Source Native</span>
-                  <span class="radio-card-desc">Uncapped original display resolution</span>
+                  <span class="radio-card-desc">Direct monitor resolution with zero downscaling</span>
                 </div>
               </div>
             </div>
           </div>
+
         </div>
 
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary btn-close-modal">Cancel</button>
-        <button class="btn-primary" id="btn-save-profile">Save Changes</button>
-      </div>
+        <!-- Discord Save Bottom Bar -->
+        <div class="settings-save-footer">
+          <div class="settings-save-notice">Careful — you have unsaved changes!</div>
+          <div class="settings-save-buttons">
+            <button type="button" class="btn-discord-ghost btn-close-modal">Cancel</button>
+            <button type="button" class="btn-discord-primary" id="btn-save-profile">Save Changes</button>
+          </div>
+        </div>
+
+      </main>
+
     </div>
   </div>
 
@@ -762,9 +829,9 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/icons.js?v=29"></script>
-  <script src="/js/audio-manager.js?v=29"></script>
-  <script src="/js/webrtc-voice.js?v=29"></script>
-  <script src="/js/app.js?v=29"></script>
+  <script src="/js/icons.js?v=30"></script>
+  <script src="/js/audio-manager.js?v=30"></script>
+  <script src="/js/webrtc-voice.js?v=30"></script>
+  <script src="/js/app.js?v=30"></script>
 </body>
 </html>

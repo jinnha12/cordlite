@@ -2062,8 +2062,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   });
 
-  // Global Key Event Listeners: Quick Switcher (Ctrl+K), Theater Mode (T), Fullscreen (F), Stream Chat (C), PTT
+  // Global Key Event Listeners: Quick Switcher (Ctrl+K), Theater Mode (T), Fullscreen (F), Stream Chat (C), PTT, ESC Modal Close
   window.addEventListener('keydown', (e) => {
+    // ESC closes any open modal window
+    if (e.key === 'Escape') {
+      const openModalEl = document.querySelector('.modal-overlay.open') || (modalProfile && modalProfile.style.display !== 'none' && modalProfile.style.display !== '' ? modalProfile : null);
+      if (openModalEl) {
+        closeModal(openModalEl);
+        return;
+      }
+    }
+
     // Quick Switcher shortcut: Ctrl+K or Cmd+K
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
@@ -2248,6 +2257,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedProfileColor = (user && user.avatarColor) || '#5865F2';
 
   function updateAvatarPreview(imgUrl, color, name) {
+    const banner = document.getElementById('profile-card-banner');
+    if (banner) banner.style.backgroundColor = color || selectedProfileColor;
+    const namePreview = document.getElementById('profile-card-name-preview');
+    if (namePreview) namePreview.textContent = (name || (user && user.name) || 'User');
+
     if (imgUrl) {
       avatarPreviewImg.src = imgUrl;
       avatarPreviewImg.style.display = 'block';
@@ -2603,10 +2617,58 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   });
 
+  // Discord Settings Tab Navigation & Live Previews
+  const settingsTabTitles = {
+    profile: {
+      title: 'My Profile',
+      subtitle: 'Customize how you appear to others across servers'
+    },
+    voice: {
+      title: 'Voice & Audio Settings',
+      subtitle: 'Configure your microphone input mode, sensitivity, and keybinds'
+    },
+    video: {
+      title: 'Screen Share Quality',
+      subtitle: 'Select optimal resolution and frame rate for streaming your screen'
+    }
+  };
+
+  const titleDisplay = document.getElementById('settings-title-display');
+  const subtitleDisplay = document.getElementById('settings-subtitle-display');
+
+  document.querySelectorAll('.settings-tab-btn[data-tab]').forEach(tabBtn => {
+    tabBtn.onclick = () => {
+      const tab = tabBtn.dataset.tab;
+      document.querySelectorAll('.settings-tab-btn[data-tab]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.remove('active'));
+      tabBtn.classList.add('active');
+
+      const targetPane = document.getElementById(`settings-pane-${tab}`);
+      if (targetPane) targetPane.classList.add('active');
+
+      if (settingsTabTitles[tab]) {
+        if (titleDisplay) titleDisplay.textContent = settingsTabTitles[tab].title;
+        if (subtitleDisplay) subtitleDisplay.textContent = settingsTabTitles[tab].subtitle;
+      }
+    };
+  });
+
+  const inputProfileNameEl = document.getElementById('input-profile-name');
+  if (inputProfileNameEl) {
+    inputProfileNameEl.oninput = () => {
+      const namePreview = document.getElementById('profile-card-name-preview');
+      if (namePreview) namePreview.textContent = inputProfileNameEl.value.trim() || 'User';
+    };
+  }
+
   // Settings Modal Open Sync
   const origBtnUserSettingsClick = btnUserSettings ? btnUserSettings.onclick : null;
   if (btnUserSettings) {
     btnUserSettings.onclick = () => {
+      // Reset to first tab (My Profile)
+      const firstTab = document.querySelector('.settings-tab-btn[data-tab="profile"]');
+      if (firstTab) firstTab.click();
+
       // Sync quality card selection
       currentStreamQuality = localStorage.getItem('cordlite_stream_quality') || '720p30';
       streamQualityCards.forEach(c => {
