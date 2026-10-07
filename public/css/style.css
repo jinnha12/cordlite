@@ -135,6 +135,34 @@
   cursor: not-allowed;
 }
 
+#tg-login-card .btn-demo {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(88, 101, 242, 0.15);
+  border: 1px solid rgba(88, 101, 242, 0.4);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#tg-login-card .btn-demo:hover {
+  background: #5865f2;
+  border-color: #5865f2;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.35);
+}
+
+#tg-login-card .btn-demo:active {
+  transform: translateY(0);
+}
+
 #tg-login-card .tg-phone-input-wrap {
   width: 100%;
 }

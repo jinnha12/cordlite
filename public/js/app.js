@@ -55,8 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
       name: user.name,
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl,
-      isTelegramVerified: true,
+      isTelegramVerified: !!user.isTelegramVerified,
       telegramPhone: user.telegramPhone || null,
+      telegramUsername: user.telegramUsername || null,
       serverId: inviteServerId || 'friends-hangout'
     });
   }
@@ -70,7 +71,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const phoneDisplay = document.getElementById('settings-account-phone');
     const btnLogout = document.getElementById('btn-logout');
     if (phoneDisplay && user) {
-      phoneDisplay.textContent = user.telegramUsername ? ('@' + user.telegramUsername) : (user.name || 'Connected');
+      if (user.isDemoUser) {
+        phoneDisplay.textContent = 'Demo Guest (' + user.name + ')';
+      } else {
+        phoneDisplay.textContent = user.telegramUsername ? ('@' + user.telegramUsername) : (user.name || 'Connected');
+      }
     }
     if (btnLogout) {
       btnLogout.onclick = logout;
@@ -2879,6 +2884,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resendTimer     = document.getElementById('tg-resend-timer');
     const resendCountdown = document.getElementById('tg-resend-countdown');
     const btnChangeUser   = document.getElementById('btn-tg-change-user');
+    const btnDemoLogin    = document.getElementById('btn-demo-login');
 
     let currentTargetUsername = '';
     let resendInterval = null;
@@ -3057,6 +3063,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnResend) {
       btnResend.onclick = doSendCode;
+    }
+
+    if (btnDemoLogin) {
+      btnDemoLogin.onclick = () => {
+        const rawInput = inputUsername ? inputUsername.value.trim().replace(/^@/, '') : '';
+        const guestIdNum = Math.floor(100 + Math.random() * 900);
+        const displayName = rawInput || ('Guest #' + guestIdNum);
+        const palette = ['#5865F2', '#57F287', '#FEE75C', '#EB459E', '#ED4245', '#1ABC9C', '#9B59B6'];
+        const randomColor = palette[Math.floor(Math.random() * palette.length)];
+
+        const demoUser = {
+          userId: 'usr-guest-' + Math.random().toString(36).substring(2, 9),
+          name: displayName,
+          avatarColor: randomColor,
+          avatarUrl: null,
+          telegramUsername: rawInput ? ('demo_' + rawInput.toLowerCase().replace(/[^a-z0-9_]/g, '')) : ('guest_' + guestIdNum),
+          isTelegramVerified: true,
+          isDemoUser: true,
+          createdAt: Date.now()
+        };
+
+        if (resendInterval) clearInterval(resendInterval);
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        try { sessionStorage.removeItem('cordlite_tg_session_id'); } catch (e) {}
+
+        localStorage.setItem('cordlite_user', JSON.stringify(demoUser));
+        showMainApp(demoUser);
+        showToast('🚀 Entered as ' + demoUser.name + '! (Demo Mode)');
+      };
     }
 
     socket.on('auth:telegram:code_sent', (data) => {

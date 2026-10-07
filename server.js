@@ -305,7 +305,7 @@ io.on('connection', (socket) => {
     const targetServerId = userData.serverId || 'friends-hangout';
     const isTg = !!userData.isTelegramVerified;
     const tgPhone = userData.telegramPhone || null;
-    activeUsers.set(socket.id, {
+    const userObj = {
       socketId: socket.id,
       userId: userData.userId || socket.id,
       name: userData.name || 'Anonymous',
@@ -313,6 +313,7 @@ io.on('connection', (socket) => {
       avatarUrl: userData.avatarUrl || null,
       isTelegramVerified: isTg,
       telegramPhone: tgPhone,
+      telegramUsername: userData.telegramUsername || null,
       serverId: targetServerId,
       channelId: null,
       voiceChannelId: null,
@@ -321,7 +322,22 @@ io.on('connection', (socket) => {
       isSpeaking: false,
       isCameraOn: false,
       isScreenSharing: false
-    });
+    };
+    activeUsers.set(socket.id, userObj);
+
+    if (!db.users) db.users = {};
+    if (!db.users[userObj.userId]) {
+      db.users[userObj.userId] = {
+        userId: userObj.userId,
+        name: userObj.name,
+        avatarColor: userObj.avatarColor,
+        avatarUrl: userObj.avatarUrl,
+        telegramUsername: userObj.telegramUsername,
+        isTelegramVerified: isTg,
+        createdAt: Date.now()
+      };
+      saveStore();
+    }
 
     // Make socket immediately join target server room!
     socket.join(`server:${targetServerId}`);
