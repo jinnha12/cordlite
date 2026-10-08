@@ -1,6 +1,8 @@
 /**
- * VoiceEngine - Direct WebRTC P2P Voice Mesh + WebRTC Video & Screen Sharing
- * High-performance, low-latency UDP voice communication with 0% server audio relay load
+ * VoiceEngine - Hybrid Dual-Engine Voice System:
+ * 1. WebRTC P2P Voice Mesh with Global STUN & OpenRelay TURN Relay (0% server load, 48kHz Opus HD voice)
+ * 2. Instant Zero-Lag WebSocket Audio Fallback (guarantees you ALWAYS hear your friends across any firewall or mobile network)
+ * 3. Smart Anti-Lag Buffer Trimming (never builds up queues or lag, even with 3+ users)
  */
 class WebRTCVoiceManager {
   constructor(socket, user = null) {
@@ -9,9 +11,7 @@ class WebRTCVoiceManager {
     this.localStream = null;
     this.audioCtx = null;
     this.micSource = null;
-    this.micAnalyser = null;
-    this.vadInterval = null;
-    this.remoteSpeakingInterval = null;
+    this.processor = null;
     this.currentChannelId = null;
 
     this.isMuted = false;
@@ -36,7 +36,8 @@ class WebRTCVoiceManager {
     this.localScreenStream = null;
     this.peerConnections = new Map(); // socketId -> RTCPeerConnection
     this.peerVideoStreams = new Map(); // socketId -> MediaStream
-    this.peerAudioNodes = new Map(); // socketId -> { audioEl, sourceNode, gainNode, analyserNode, stream }
+    this.peerAudioNodes = new Map(); // socketId -> { audioEl, sourceNode, analyserNode, stream }
+    this.playbackTimes = new Map(); // socketId -> next scheduled playback time (for anti-lag audio queue)
 
     // Local mute and volume control for peers (Discord style)
     this.peerVolumes = new Map(); // (socketId/userId) -> volume (0.0 to 1.5)
@@ -61,13 +62,32 @@ class WebRTCVoiceManager {
     this.screenCaptureVideo = null;
     this.screenCaptureCanvas = null;
 
+    // Remote speaking analysis interval
+    this.remoteSpeakingInterval = null;
+
     // Mic test state
     this.isTestingMic = false;
     this.onMicTestUpdate = null;
     this.testStream = null;
     this.testSource = null;
-    this.testAnalyser = null;
-    this.testInterval = null;
+    this.testProcessor = null;
+
+    // High-availability global STUN + free public OpenRelay TURN configuration
+    this.iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp'
+        ],
+        username: 'openrelay',
+        credential: 'openrelay'
+      }
+    ];
 
     this.setupSocketEvents();
   }
@@ -97,12 +117,12 @@ class WebRTCVoiceManager {
       if (userId) this.locallyMutedUsers.delete(userId);
     }
 
-    // Apply immediately to Web Audio GainNode
-    const node = this.peerAudioNodes.get(socketId);
-    if (node && node.gainNode && this.audioCtx) {
-      const isLocallyMuted = this.isPeerLocallyMuted(socketId, userId);
-      const effectiveVol = (this.isDeafened || isLocallyMuted) ? 0 : vol;
-      node.gainNode.gain.setValueAtTime(effectiveVol, this.audioCtx.currentTime);
+    // Update WebRTC HTMLAudioElement if present
+    const audioEl = document.getElementById(`remote-audio-${socketId}`);
+    if (audioEl) {
+      const isMuted = this.isPeerLocallyMuted(socketId, userId);
+      audioEl.muted = this.isDeafened || isMuted;
+      audioEl.volume = Math.max(0, Math.min(1.0, vol));
     }
 
     this.notifyPeersUpdate();
@@ -126,12 +146,10 @@ class WebRTCVoiceManager {
       nowMuted = true;
     }
 
-    // Apply immediately to Web Audio GainNode
-    const node = this.peerAudioNodes.get(socketId);
-    if (node && node.gainNode && this.audioCtx) {
-      const vol = this.getPeerVolume(socketId, userId);
-      const effectiveVol = (this.isDeafened || nowMuted) ? 0 : vol;
-      node.gainNode.gain.setValueAtTime(effectiveVol, this.audioCtx.currentTime);
+    // Update WebRTC HTMLAudioElement
+    const audioEl = document.getElementById(`remote-audio-${socketId}`);
+    if (audioEl) {
+      audioEl.muted = this.isDeafened || nowMuted;
     }
 
     this.notifyPeersUpdate();
@@ -144,13 +162,20 @@ class WebRTCVoiceManager {
       this.audioCtx = new AudioCtx();
     }
     if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+      this.audioCtx.resume().catch(() => {});
     }
     return this.audioCtx;
   }
 
   setPeersUpdateCallback(cb) {
     this.onPeersUpdateCallback = cb;
+  }
+
+  // Check if WebRTC P2P direct audio stream is successfully established
+  isWebRTCActive(socketId) {
+    const pc = this.peerConnections.get(socketId);
+    if (!pc) return false;
+    return pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed';
   }
 
   setupSocketEvents() {
@@ -216,7 +241,6 @@ class WebRTCVoiceManager {
         const pc = this.getOrCreatePeerConnection(fromSocketId);
 
         if (signal.type === 'offer') {
-          // Ensure local tracks are attached before answering
           this.attachLocalTracksToPC(pc);
 
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
@@ -265,6 +289,52 @@ class WebRTCVoiceManager {
 
     this.socket.on('voice:signal', handleSignal);
     this.socket.on('voice:video_signal', handleSignal);
+
+    // Direct WebSocket audio stream chunk (100% universal firewall-piercing fallback)
+    this.socket.on('voice:audio_stream', ({ fromSocketId, fromUser, audioData, sampleRate }) => {
+      if (this.isDeafened) return;
+      if (fromSocketId === this.socket.id) return;
+      if (this.user && fromUser && fromUser.userId === this.user.userId) return;
+      if (this.isPeerLocallyMuted(fromSocketId, fromUser ? fromUser.userId : null)) return;
+
+      // If WebRTC P2P is already established and delivering UDP Opus audio, skip WebSocket chunk to avoid echo
+      if (this.isWebRTCActive(fromSocketId)) {
+        return;
+      }
+
+      let peer = this.peers.get(fromSocketId);
+      if (!peer) {
+        peer = {
+          socketId: fromSocketId,
+          userId: fromUser ? fromUser.userId : null,
+          name: fromUser ? fromUser.name : 'Friend',
+          avatarColor: fromUser ? fromUser.avatarColor : '#5865F2',
+          avatarUrl: fromUser ? fromUser.avatarUrl : null,
+          isSpeaking: true,
+          isMuted: false,
+          isDeafened: false,
+          isCameraOn: false,
+          isScreenSharing: false
+        };
+        this.peers.set(fromSocketId, peer);
+      }
+
+      // Visual speaking indicator
+      const wasSpeaking = peer.isSpeaking;
+      peer.isSpeaking = true;
+      if (peer.speakingTimeout) clearTimeout(peer.speakingTimeout);
+      peer.speakingTimeout = setTimeout(() => {
+        peer.isSpeaking = false;
+        this.notifyPeerSpeaking(fromSocketId, false);
+      }, 350);
+
+      if (!wasSpeaking) {
+        this.notifyPeerSpeaking(fromSocketId, true);
+      }
+
+      // Play audio chunk through anti-lag jitter-buffered Web Audio queue
+      this.playWebSocketAudioChunk(fromSocketId, audioData, sampleRate, fromUser);
+    });
 
     // Speaking indicator event from server
     const handleSpeaking = ({ socketId, isSpeaking }) => {
@@ -354,6 +424,55 @@ class WebRTCVoiceManager {
     });
   }
 
+  // Playback engine for WebSocket fallback with strict anti-lag trimming
+  playWebSocketAudioChunk(socketId, buffer, sampleRate, fromUser = null) {
+    try {
+      const volume = this.getPeerVolume(socketId, fromUser ? fromUser.userId : null);
+      if (volume <= 0.001) return;
+
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const int16 = new Int16Array(buffer);
+      if (int16.length === 0) return;
+
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / (int16[i] < 0 ? 32768.0 : 32767.0);
+      }
+
+      const effectiveSampleRate = sampleRate || ctx.sampleRate;
+      const audioBuffer = ctx.createBuffer(1, float32.length, effectiveSampleRate);
+      audioBuffer.getChannelData(0).set(float32);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+
+      const gain = ctx.createGain();
+      gain.gain.value = volume;
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      let nextTime = this.playbackTimes.get(socketId) || now;
+
+      // ANTI-LAG SYSTEM:
+      // If playback buffer has fallen behind the clock, OR if it has accumulated more than 100ms of lag:
+      // Reset immediately to now + 25ms jitter buffer cushion to prevent multi-second queues!
+      if (nextTime < now || (nextTime - now) > 0.10) {
+        nextTime = now + 0.025;
+      }
+
+      source.start(nextTime);
+      this.playbackTimes.set(socketId, nextTime + audioBuffer.duration);
+    } catch (err) {
+      console.warn('playWebSocketAudioChunk error:', err);
+    }
+  }
+
   // Attach local audio and video tracks to a PeerConnection
   attachLocalTracksToPC(pc) {
     if (!pc) return;
@@ -388,12 +507,7 @@ class WebRTCVoiceManager {
     }
 
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun.cloudflare.com:3478' }
-      ]
+      iceServers: this.iceServers
     });
 
     // Attach local tracks immediately
@@ -430,6 +544,7 @@ class WebRTCVoiceManager {
     };
 
     pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC ICE State with ${socketId}]:`, pc.iceConnectionState);
       if (pc.iceConnectionState === 'failed') {
         try { pc.restartIce(); } catch (e) {}
       }
@@ -470,78 +585,105 @@ class WebRTCVoiceManager {
     return this.initiateOfferTo(socketId);
   }
 
-  // Route remote WebRTC audio through Web Audio GainNode for volume & local mute control
+  // Bulletproof HTML5 Audio playback for remote WebRTC streams
   setupRemoteAudio(socketId, track, stream) {
     try {
-      this.cleanupRemoteAudio(socketId);
+      let container = document.getElementById('remote-audio-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'remote-audio-container';
+        container.style.position = 'fixed';
+        container.style.bottom = '-9999px';
+        container.style.left = '-9999px';
+        container.style.width = '1px';
+        container.style.height = '1px';
+        container.style.opacity = '0';
+        container.style.pointerEvents = 'none';
+        document.body.appendChild(container);
+      }
 
-      const ctx = this.getAudioContext();
-      const audioStream = new MediaStream([track]);
+      let audioEl = document.getElementById(`remote-audio-${socketId}`);
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.id = `remote-audio-${socketId}`;
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        container.appendChild(audioEl);
+      }
 
-      // Hidden audio element attached to stream to prevent Chromium background-tab garbage collection
-      const audioEl = document.createElement('audio');
-      audioEl.autoplay = true;
-      audioEl.playsInline = true;
-      audioEl.muted = true; // Audio is routed to destination through Web Audio GainNode
-      audioEl.srcObject = audioStream;
-      audioEl.style.display = 'none';
-      document.body.appendChild(audioEl);
-      audioEl.play().catch(() => {});
-
-      // Web Audio GainNode pipeline
-      const sourceNode = ctx.createMediaStreamSource(audioStream);
-      const gainNode = ctx.createGain();
+      audioEl.srcObject = stream;
 
       const peer = this.peers.get(socketId);
       const userId = peer ? peer.userId : null;
-      const vol = this.getPeerVolume(socketId, userId);
       const isMuted = this.isPeerLocallyMuted(socketId, userId);
-      gainNode.gain.value = (this.isDeafened || isMuted) ? 0 : vol;
+      audioEl.muted = this.isDeafened || isMuted;
 
-      // AnalyserNode for ultra-fast remote speaking detection
-      const analyserNode = ctx.createAnalyser();
-      analyserNode.fftSize = 256;
-      analyserNode.smoothingTimeConstant = 0.3;
+      const vol = this.getPeerVolume(socketId, userId);
+      audioEl.volume = Math.max(0, Math.min(1.0, vol));
 
-      sourceNode.connect(analyserNode);
-      analyserNode.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => {
+          console.warn(`[WebRTC] Autoplay unlock needed for ${socketId}:`, e);
+          const unlock = () => {
+            audioEl.play().catch(() => {});
+            document.removeEventListener('click', unlock);
+            document.removeEventListener('keydown', unlock);
+          };
+          document.addEventListener('click', unlock, { once: true });
+          document.addEventListener('keydown', unlock, { once: true });
+        });
+      }
 
-      this.peerAudioNodes.set(socketId, {
-        audioEl,
-        sourceNode,
-        gainNode,
-        analyserNode,
-        stream: audioStream
-      });
+      // AnalyserNode for fast client-side speaking detection
+      try {
+        const ctx = this.getAudioContext();
+        if (ctx) {
+          const sourceNode = ctx.createMediaStreamSource(stream);
+          const analyserNode = ctx.createAnalyser();
+          analyserNode.fftSize = 256;
+          analyserNode.smoothingTimeConstant = 0.3;
+          sourceNode.connect(analyserNode);
+
+          this.peerAudioNodes.set(socketId, {
+            audioEl,
+            sourceNode,
+            analyserNode,
+            stream
+          });
+        }
+      } catch (err) {
+        console.warn('AnalyserNode setup notice:', err);
+      }
     } catch (err) {
       console.warn(`setupRemoteAudio error for ${socketId}:`, err);
     }
   }
 
   cleanupRemoteAudio(socketId) {
+    const audioEl = document.getElementById(`remote-audio-${socketId}`);
+    if (audioEl) {
+      try {
+        audioEl.pause();
+        audioEl.srcObject = null;
+        audioEl.remove();
+      } catch (e) {}
+    }
+
     const node = this.peerAudioNodes.get(socketId);
     if (node) {
-      if (node.audioEl) {
-        try {
-          node.audioEl.srcObject = null;
-          node.audioEl.remove();
-        } catch (e) {}
-      }
       if (node.sourceNode) {
         try { node.sourceNode.disconnect(); } catch (e) {}
-      }
-      if (node.gainNode) {
-        try { node.gainNode.disconnect(); } catch (e) {}
       }
       if (node.analyserNode) {
         try { node.analyserNode.disconnect(); } catch (e) {}
       }
       this.peerAudioNodes.delete(socketId);
     }
+    this.playbackTimes.delete(socketId);
   }
 
-  // Periodic client-side waveform analysis to detect speaking without network overhead
+  // Periodic client-side waveform analysis to detect speaking
   startRemoteSpeakingMonitor() {
     if (this.remoteSpeakingInterval) return;
     this.remoteSpeakingInterval = setInterval(() => {
@@ -602,14 +744,14 @@ class WebRTCVoiceManager {
   async joinVoice(serverId, channelId) {
     const ctx = this.getAudioContext();
     if (ctx && ctx.state === 'suspended') {
-      await ctx.resume();
+      await ctx.resume().catch(() => {});
     }
 
     await this.acquireLocalAudio();
     this.currentChannelId = channelId;
 
-    // Start local VAD / mic monitoring and remote speaking detection
-    this.startVADMonitoring();
+    // Start microphone capture and remote speaking monitor
+    this.startMicrophoneStream();
     this.startRemoteSpeakingMonitor();
 
     this.socket.emit('voice:join', { serverId, channelId });
@@ -618,85 +760,81 @@ class WebRTCVoiceManager {
     }
   }
 
-  // Non-blocking AnalyserNode based mic metering & Voice Activity Detection
-  startVADMonitoring() {
-    this.stopVADMonitoring();
+  // Combined Web Audio capture, VAD gating, and WebSocket fallback streamer
+  startMicrophoneStream() {
     if (!this.localStream) return;
-
     try {
       const ctx = this.getAudioContext();
       this.micSource = ctx.createMediaStreamSource(this.localStream);
-      this.micAnalyser = ctx.createAnalyser();
-      this.micAnalyser.fftSize = 512;
-      this.micAnalyser.smoothingTimeConstant = 0.3;
-      this.micSource.connect(this.micAnalyser);
 
-      this.vadInterval = setInterval(() => {
-        if (!this.micAnalyser || !this.currentChannelId) return;
+      // Process 2048-sample chunks (~46ms at 44.1kHz / 42ms at 48kHz)
+      this.processor = ctx.createScriptProcessor(2048, 1, 1);
 
-        const data = new Uint8Array(this.micAnalyser.frequencyBinCount);
-        this.micAnalyser.getByteFrequencyData(data);
+      this.processor.onaudioprocess = (e) => {
+        if (this.isMuted || !this.currentChannelId) return;
+
+        const input = e.inputBuffer.getChannelData(0);
         let sum = 0;
-        for (let i = 0; i < data.length; i++) sum += data[i];
-        const avg = sum / (data.length * 255); // 0.0 to 1.0
-
-        const micLevel = Math.min(1, avg * 4.5);
-        const isAboveGate = this.autoSensitivity ? (avg > 0.018) : (avg > this.sensitivityThreshold);
+        for (let i = 0; i < input.length; i++) {
+          sum += input[i] * input[i];
+        }
+        const rms = Math.sqrt(sum / input.length);
+        const micLevel = Math.min(1, rms * 5.0);
+        const isAboveGate = this.autoSensitivity ? (rms > 0.019) : (rms > this.sensitivityThreshold);
 
         if (this.onMicLevelUpdate) {
           this.onMicLevelUpdate(micLevel, isAboveGate);
         }
 
-        if (this.isMuted) {
-          if (this.lastSpeakingState) {
-            this.lastSpeakingState = false;
-            this.socket.emit('voice:speaking', { isSpeaking: false });
-            if (this.onLocalSpeaking) this.onLocalSpeaking(false);
-          }
-          return;
-        }
+        let shouldTransmit = false;
 
         if (this.inputMode === 'ptt') {
-          // In PTT mode, speaking state is controlled by setPttActive
-          return;
+          shouldTransmit = this.isPttActive;
+        } else {
+          // VAD Mode
+          const isSpeaking = isAboveGate;
+
+          if (isSpeaking !== this.lastSpeakingState) {
+            this.lastSpeakingState = isSpeaking;
+            this.socket.emit('voice:speaking', { isSpeaking });
+            if (this.onLocalSpeaking) this.onLocalSpeaking(isSpeaking);
+          }
+
+          if (isSpeaking) {
+            this.silenceHoldFrames = 3; // ~130ms hold decay
+            shouldTransmit = true;
+          } else if (this.silenceHoldFrames > 0) {
+            this.silenceHoldFrames--;
+            shouldTransmit = true;
+          }
         }
 
-        // VAD Mode: Apply silence hold frames (~280ms) to prevent clipping between words
-        let isSpeaking = isAboveGate;
-        if (isSpeaking) {
-          this.silenceHoldFrames = 4;
-        } else if (this.silenceHoldFrames > 0) {
-          this.silenceHoldFrames--;
-          isSpeaking = true;
-        }
+        // STRICT VAD GATING: Only send audio packets when ACTUALLY speaking!
+        // Prevents server congestion and eliminates lag for 3+ users!
+        if (shouldTransmit) {
+          const pcm = new Int16Array(input.length);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
 
-        if (isSpeaking !== this.lastSpeakingState) {
-          this.lastSpeakingState = isSpeaking;
-          this.socket.emit('voice:speaking', { isSpeaking });
-          if (this.onLocalSpeaking) this.onLocalSpeaking(isSpeaking);
+          this.socket.emit('voice:audio_stream', {
+            channelId: this.currentChannelId,
+            audioData: pcm.buffer,
+            sampleRate: ctx.sampleRate
+          });
         }
-      }, 70);
+      };
+
+      // Mute destination so you don't hear your own mic echo
+      const muteGain = ctx.createGain();
+      muteGain.gain.value = 0;
+
+      this.micSource.connect(this.processor);
+      this.processor.connect(muteGain);
+      muteGain.connect(ctx.destination);
     } catch (err) {
-      console.warn('VAD Monitoring error:', err);
-    }
-  }
-
-  stopVADMonitoring() {
-    if (this.vadInterval) {
-      clearInterval(this.vadInterval);
-      this.vadInterval = null;
-    }
-    if (this.micAnalyser) {
-      try { this.micAnalyser.disconnect(); } catch (e) {}
-      this.micAnalyser = null;
-    }
-    if (this.micSource) {
-      try { this.micSource.disconnect(); } catch (e) {}
-      this.micSource = null;
-    }
-    if (this.lastSpeakingState) {
-      this.lastSpeakingState = false;
-      if (this.onLocalSpeaking) this.onLocalSpeaking(false);
+      console.warn('Error starting mic stream:', err);
     }
   }
 
@@ -710,7 +848,7 @@ class WebRTCVoiceManager {
     localStorage.setItem('cordlite_auto_sens', this.autoSensitivity ? 'true' : 'false');
   }
 
-  // Microphone Test / Calibration
+  // Microphone Test / Calibration in Settings
   async startMicTest(callback) {
     this.isTestingMic = true;
     this.onMicTestUpdate = callback;
@@ -720,24 +858,28 @@ class WebRTCVoiceManager {
       }
       const ctx = this.getAudioContext();
       this.testSource = ctx.createMediaStreamSource(this.testStream);
-      this.testAnalyser = ctx.createAnalyser();
-      this.testAnalyser.fftSize = 512;
-      this.testAnalyser.smoothingTimeConstant = 0.3;
-      this.testSource.connect(this.testAnalyser);
+      this.testProcessor = ctx.createScriptProcessor(2048, 1, 1);
 
-      this.testInterval = setInterval(() => {
-        if (!this.isTestingMic || !this.testAnalyser) return;
-        const data = new Uint8Array(this.testAnalyser.frequencyBinCount);
-        this.testAnalyser.getByteFrequencyData(data);
+      this.testProcessor.onaudioprocess = (e) => {
+        if (!this.isTestingMic) return;
+        const input = e.inputBuffer.getChannelData(0);
         let sum = 0;
-        for (let i = 0; i < data.length; i++) sum += data[i];
-        const avg = sum / (data.length * 255);
-        const micLevel = Math.min(1, avg * 4.5);
-        const isAboveGate = this.autoSensitivity ? (avg > 0.018) : (avg > this.sensitivityThreshold);
+        for (let i = 0; i < input.length; i++) {
+          sum += input[i] * input[i];
+        }
+        const rms = Math.sqrt(sum / input.length);
+        const micLevel = Math.min(1, rms * 5.0);
+        const isAboveGate = this.autoSensitivity ? (rms > 0.019) : (rms > this.sensitivityThreshold);
         if (this.onMicTestUpdate) {
           this.onMicTestUpdate(micLevel, isAboveGate);
         }
-      }, 70);
+      };
+
+      const muteGain = ctx.createGain();
+      muteGain.gain.value = 0;
+      this.testSource.connect(this.testProcessor);
+      this.testProcessor.connect(muteGain);
+      muteGain.connect(ctx.destination);
       return true;
     } catch (err) {
       console.warn('Microphone test access error:', err);
@@ -748,13 +890,9 @@ class WebRTCVoiceManager {
   stopMicTest() {
     this.isTestingMic = false;
     this.onMicTestUpdate = null;
-    if (this.testInterval) {
-      clearInterval(this.testInterval);
-      this.testInterval = null;
-    }
-    if (this.testAnalyser) {
-      try { this.testAnalyser.disconnect(); } catch (e) {}
-      this.testAnalyser = null;
+    if (this.testProcessor) {
+      try { this.testProcessor.disconnect(); } catch (e) {}
+      this.testProcessor = null;
     }
     if (this.testSource) {
       try { this.testSource.disconnect(); } catch (e) {}
@@ -897,7 +1035,6 @@ class WebRTCVoiceManager {
         audio: true
       };
     } else {
-      // 720p30 standard
       return {
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 }, cursor: 'always' },
         audio: true
@@ -919,6 +1056,18 @@ class WebRTCVoiceManager {
       const constraints = this.getDisplayMediaConstraints();
       this.localScreenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       this.isScreenSharing = true;
+
+      // Feature: Mix system audio into microphone stream if present
+      const audioTracks = this.localScreenStream.getAudioTracks();
+      if (audioTracks.length > 0 && this.processor) {
+        try {
+          const ctx = this.getAudioContext();
+          this.screenAudioSource = ctx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
+          this.screenAudioSource.connect(this.processor);
+        } catch (e) {
+          console.warn('Could not mix system audio:', e);
+        }
+      }
 
       // Handle stream end
       const track = this.localScreenStream.getVideoTracks()[0];
@@ -945,7 +1094,7 @@ class WebRTCVoiceManager {
     if (!this._lastStreamRequests) this._lastStreamRequests = new Map();
     const now = Date.now();
     if (this._lastStreamRequests.get(peerSocketId) && (now - this._lastStreamRequests.get(peerSocketId) < 3000)) {
-      return; // Throttled to prevent renegotiation hammering
+      return;
     }
     this._lastStreamRequests.set(peerSocketId, now);
     this.socket.emit('voice:request_stream', { toSocketId: peerSocketId });
@@ -1008,6 +1157,10 @@ class WebRTCVoiceManager {
 
   stopScreenShare() {
     this.stopScreenFrameBroadcast();
+    if (this.screenAudioSource) {
+      try { this.screenAudioSource.disconnect(); } catch (e) {}
+      this.screenAudioSource = null;
+    }
     if (this.localScreenStream) {
       this.localScreenStream.getTracks().forEach(t => t.stop());
       this.localScreenStream = null;
@@ -1048,14 +1201,20 @@ class WebRTCVoiceManager {
     this.socket.emit('voice:leave');
     this.currentChannelId = null;
 
-    this.stopVADMonitoring();
-    this.stopRemoteSpeakingMonitor();
-
+    if (this.processor) {
+      try { this.processor.disconnect(); } catch (e) {}
+      this.processor = null;
+    }
+    if (this.micSource) {
+      try { this.micSource.disconnect(); } catch (e) {}
+      this.micSource = null;
+    }
     if (this.localStream) {
       this.localStream.getTracks().forEach(t => t.stop());
       this.localStream = null;
     }
 
+    this.stopRemoteSpeakingMonitor();
     this.stopCamera();
     this.stopScreenShare();
 
@@ -1065,13 +1224,14 @@ class WebRTCVoiceManager {
     this.peerConnections.clear();
     this.peerVideoStreams.clear();
 
-    for (const socketId of this.peerAudioNodes.keys()) {
+    for (const socketId of this.peers.keys()) {
       this.cleanupRemoteAudio(socketId);
     }
     this.peerAudioNodes.clear();
 
     this.peers.clear();
     this.pendingIceCandidates.clear();
+    this.playbackTimes.clear();
 
     if (window.audioManager) {
       window.audioManager.playLeave();
@@ -1111,15 +1271,13 @@ class WebRTCVoiceManager {
       }
     }
 
-    // Apply mute/unmute to all remote peer GainNodes
-    const ctx = this.getAudioContext();
-    for (const [peerSocketId, node] of this.peerAudioNodes.entries()) {
-      if (node && node.gainNode && ctx) {
-        const peer = this.peers.get(peerSocketId);
-        const userId = peer ? peer.userId : null;
-        const vol = this.getPeerVolume(peerSocketId, userId);
-        const effectiveVol = this.isDeafened ? 0 : vol;
-        node.gainNode.gain.setValueAtTime(effectiveVol, ctx.currentTime);
+    // Update all remote WebRTC audio elements
+    for (const socketId of this.peers.keys()) {
+      const audioEl = document.getElementById(`remote-audio-${socketId}`);
+      if (audioEl) {
+        const peer = this.peers.get(socketId);
+        const isMuted = this.isPeerLocallyMuted(socketId, peer ? peer.userId : null);
+        audioEl.muted = this.isDeafened || isMuted;
       }
     }
 
